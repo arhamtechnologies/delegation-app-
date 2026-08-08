@@ -25,11 +25,14 @@ create policy "notifications read" on public.notifications for select to authent
 drop policy if exists "notifications update" on public.notifications;
 create policy "notifications update" on public.notifications for update to authenticated using(
   recipient_employee_id=(select id from public.employees where auth_user_id=auth.uid()) or public.is_manager()
+)
+with check(
+  recipient_employee_id=(select id from public.employees where auth_user_id=auth.uid()) or public.is_manager()
 );
 
 create index if not exists notifications_recipient_created_idx on public.notifications(recipient_employee_id, created_at desc);
 
-create or replace function public.create_task_assignment_notification() returns trigger language plpgsql security definer set search_path=public as $$
+create or replace function public.create_task_assignment_notification() returns trigger language plpgsql security definer set search_path='' as $$
 begin
   insert into public.notifications(recipient_employee_id, task_id, kind, title, body)
   values (new.assignee_id, new.id, 'assignment', 'New task assigned', new.title);
@@ -37,10 +40,12 @@ begin
 end;
 $$;
 
+revoke execute on function public.create_task_assignment_notification() from public, anon, authenticated, service_role;
+
 drop trigger if exists task_assignment_notification on public.tasks;
 create trigger task_assignment_notification after insert on public.tasks for each row execute function public.create_task_assignment_notification();
 
-create or replace function public.create_task_update_notification() returns trigger language plpgsql security definer set search_path=public as $$
+create or replace function public.create_task_update_notification() returns trigger language plpgsql security definer set search_path='' as $$
 declare
   task_title text;
   recipient_id uuid;
@@ -54,5 +59,10 @@ begin
 end;
 $$;
 
+revoke execute on function public.create_task_update_notification() from public, anon, authenticated, service_role;
+
 drop trigger if exists task_update_notification on public.task_updates;
 create trigger task_update_notification after insert on public.task_updates for each row execute function public.create_task_update_notification();
+
+revoke update on table public.notifications from anon, authenticated;
+grant update (read_at) on table public.notifications to authenticated;

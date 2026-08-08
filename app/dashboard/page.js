@@ -4,55 +4,72 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
-import { EmptyState, MetricCard, ProgressBar, SectionHeader, StatusBadge, TaskRow, formatDateTime, relativeTime } from '../../components/UI';
+import { EmptyState, MetricCard, PriorityBadge, StatusBadge, formatDate } from '../../components/UI';
+import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
 import { getTasks, taskIsDueSoon, taskIsOverdue, updateTaskStatus } from '../../lib/task-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
 function isToday(value) {
   if (!value) return false;
-  const date = new Date(value);
-  const today = new Date();
-  return date.toDateString() === today.toDateString();
+  return new Date(value).toDateString() === new Date().toDateString();
 }
 
 export default function Dashboard() {
   const [tasks, setTasks] = useState([]);
-  const [peopleCount, setPeopleCount] = useState(0);
+  const [name, setName] = useState('there');
+  const [role, setRole] = useState('doer');
+  const [activeEmployees, setActiveEmployees] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [canCreate, setCanCreate] = useState(false);
 
   async function load() {
     setLoading(true);
-    const [{ data: taskRows = [] } = {}, { count = 0 } = {}] = await Promise.all([
-      getTasks({ limit: 100 }),
-      supabaseBrowser().from('employees').select('id', { count: 'exact', head: true }),
-    ]);
+    const { user, employee } = await getCurrentEmployee();
+    if (!user) return;
+    const manager = ['super_admin', 'assigner', 'ea'].includes(employee?.role);
+    setName(employee?.name || 'there');
+    setRole(employee?.role || 'doer');
+    setCanCreate(canCreateTasks(employee?.role));
+    const taskRequest = getTasks({ limit: 100 });
+    const employeeRequest = manager
+      ? supabaseBrowser().from('employees').select('id', { count: 'exact', head: true }).eq('active', true)
+      : Promise.resolve({ count: 0 });
+    const [{ data: taskRows = [] } = {}, { count = 0 } = {}] = await Promise.all([taskRequest, employeeRequest]);
     setTasks(taskRows || []);
-    setPeopleCount(count || 0);
+    setActiveEmployees(count || 0);
     setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
 
-  const metrics = useMemo(() => {
-    const completed = tasks.filter((task) => task.status === 'closed').length;
-    const overdue = tasks.filter(taskIsOverdue).length;
-    const dueSoon = tasks.filter(taskIsDueSoon).length;
-    const submitted = tasks.filter((task) => task.status === 'submitted').length;
-    return { total: tasks.length, completed, overdue, dueSoon, submitted, completion: tasks.length ? Math.round((completed / tasks.length) * 100) : 0 };
-  }, [tasks]);
+  const manager = ['super_admin', 'assigner', 'ea'].includes(role);
+  const metrics = useMemo(() => ({
+    total: tasks.length,
+    open: tasks.filter((task) => !['closed', 'not_required'].includes(task.status)).length,
+    overdue: tasks.filter(taskIsOverdue).length,
+    dueSoon: tasks.filter(taskIsDueSoon).length,
+    dueToday: tasks.filter((task) => isToday(task.eta) && !['closed', 'not_required'].includes(task.status)).length,
+    completed: tasks.filter((task) => task.status === 'closed').length,
+  }), [tasks]);
+
+  const priorityTasks = useMemo(() => tasks.filter((task) => taskIsOverdue(task) || taskIsDueSoon(task)).slice(0, 8), [tasks]);
 
   async function changeStatus(id, status) {
     await updateTaskStatus(id, status);
-    load();
+    await load();
   }
 
-  const attention = tasks.filter((task) => taskIsOverdue(task) || taskIsDueSoon(task)).slice(0, 5);
-  const recent = tasks.slice(0, 5);
-
-  return <AppShell title="Good morning" eyebrow="Monday, August 8, 2026" description="Here is what needs your attention today." actions={<><Link className="button button-ghost button-small" href="/notifications"><Icon name="bell" size={16} />Updates <span className="button-count">3</span></Link><Link className="button button-primary" href="/tasks?create=1"><Icon name="plus" size={17} />Create task</Link></>}>
-    <section className="hero-strip"><div><span className="hero-kicker"><Icon name="sparkles" size={14} />Your workspace at a glance</span><h2>Keep every handoff moving.</h2><p>Stay ahead of deadlines, follow-ups, and the work that matters most.</p></div><div className="hero-progress"><div className="hero-progress-top"><span>Team completion</span><strong>{metrics.completion}%</strong></div><ProgressBar value={metrics.completion} tone="mint" /><small>{metrics.completed} of {metrics.total || 0} tasks completed</small></div></section>
-    <section className="metric-grid"><MetricCard label="All tasks" value={loading ? '—' : metrics.total} change="This cycle" tone="blue" icon="clipboard" href="/tasks" /><MetricCard label="Overdue" value={loading ? '—' : metrics.overdue} change={metrics.overdue ? 'Needs attention' : 'Looking good'} tone={metrics.overdue ? 'orange' : 'green'} icon="warning" href="/tasks?status=overdue" /><MetricCard label="Due soon" value={loading ? '—' : metrics.dueSoon} change="Next 48 hours" tone="purple" icon="clock" href="/tasks" /><MetricCard label="People active" value={loading ? '—' : peopleCount} change="In workspace" tone="mint" icon="users" href="/employees" /></section>
-    <div className="dashboard-layout"><section className="panel attention-panel"><SectionHeader eyebrow="Priority queue" title="Needs attention" description="The tasks most likely to affect your week." action="View all" href="/tasks" />{attention.length ? <div className="task-list">{attention.map((task) => <TaskRow key={task.id} task={task} onStatusChange={changeStatus} />)}</div> : <EmptyState compact icon="checkCircle" title="You are all caught up" description="No overdue or due-soon tasks need attention right now." />}</section><section className="panel pulse-panel"><SectionHeader eyebrow="Team health" title="Workload pulse" description="A simple view of task movement across your workspace." /><div className="pulse-chart"><svg viewBox="0 0 520 180" role="img" aria-label="Workload trend"><defs><linearGradient id="pulseFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#6d62f6" stopOpacity=".25" /><stop offset="1" stopColor="#6d62f6" stopOpacity="0" /></linearGradient></defs><path d="M0 140 C55 130 74 92 122 106 S186 141 230 97 S298 43 342 72 S405 115 458 57 S490 40 520 20 V180 H0Z" fill="url(#pulseFill)" /><path d="M0 140 C55 130 74 92 122 106 S186 141 230 97 S298 43 342 72 S405 115 458 57 S490 40 520 20" fill="none" stroke="#6d62f6" strokeWidth="3" strokeLinecap="round" /></svg><div className="chart-axis"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div><div className="pulse-stats"><div><span className="stat-label">In review</span><strong>{metrics.submitted}</strong><small>awaiting review</small></div><div><span className="stat-label">Completed</span><strong>{metrics.completed}</strong><small>this cycle</small></div><div><span className="stat-label">People</span><strong>{peopleCount}</strong><small>active members</small></div></div></section></div>
-    <section className="panel activity-panel"><SectionHeader eyebrow="Recent movement" title="Latest task activity" action="Open task list" href="/tasks" />{recent.length ? <div className="activity-list">{recent.map((task) => <div className="activity-item" key={task.id}><span className="activity-line" /><span className="activity-icon"><Icon name={task.status === 'closed' ? 'checkCircle' : 'activity'} size={16} /></span><div><p><strong>{task.assignee?.name || 'A team member'}</strong> owns <Link href={`/tasks/${task.id}`}>{task.title}</Link></p><small>{relativeTime(task.updated_at || task.created_at)} · Due {formatDateTime(task.eta)}</small></div><StatusBadge status={task.status} compact /></div>)}</div> : <EmptyState compact icon="activity" title="No activity yet" description="New task updates will appear here." />}</section>
+  return <AppShell title={manager ? 'Dashboard' : 'My Tasks'} eyebrow="Workspace" actions={canCreate ? <Link className="button button-primary" href="/tasks?create=1"><Icon name="plus" size={17} />Create task</Link> : null}>
+    <section className="overview-intro"><p>Good morning, <strong>{name}</strong></p><span>Here is what needs your attention.</span></section>
+    <section className="metric-grid overview-metrics" aria-label="Task summary">
+      {manager ? <><MetricCard label="Total tasks" value={loading ? 'â€”' : metrics.total} href="/tasks" /><MetricCard label="Overdue" value={loading ? 'â€”' : metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Due soon" value={loading ? 'â€”' : metrics.dueSoon} tone="purple" href="/tasks" /><MetricCard label="Active employees" value={loading ? 'â€”' : activeEmployees} tone="mint" href="/employees" /></> : <><MetricCard label="My open tasks" value={loading ? 'â€”' : metrics.open} href="/tasks" /><MetricCard label="Due today" value={loading ? 'â€”' : metrics.dueToday} tone="purple" href="/tasks" /><MetricCard label="Overdue" value={loading ? 'â€”' : metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Completed" value={loading ? 'â€”' : metrics.completed} tone="mint" href="/tasks?status=closed" /></>}
+    </section>
+    <section className="panel overview-panel">
+      <div className="simple-section-heading"><div><h2>{manager ? 'Tasks needing attention' : 'My Tasks'}</h2><p>{manager ? 'Overdue and due-soon work appears here first.' : 'Your overdue and due-soon work appears here first.'}</p></div><Link className="text-link" href="/tasks">View all <Icon name="arrowUpRight" size={14} /></Link></div>
+      {loading ? <div className="loading-list"><span /><span /><span /></div> : priorityTasks.length ? <div className="simple-task-table">
+        <div className="simple-table-heading"><span>Task</span><span>Assignee</span><span>Priority</span><span>Status</span><span>Due date</span><span /></div>
+        {priorityTasks.map((task) => <div className="simple-task-row" key={task.id}><div><Link href={`/tasks/${task.id}`} className="task-title">{task.title}</Link><small>{task.category || 'General'}</small></div><span>{task.assignee?.name || 'Unassigned'}</span><PriorityBadge priority={task.priority} /><StatusBadge status={task.status} compact /><span className={taskIsOverdue(task) ? 'due-date overdue' : 'due-date'}>{formatDate(task.eta, { month: 'short', day: 'numeric' })}</span><div className="simple-row-action"><select className="status-select" aria-label={`Change status for ${task.title}`} value={task.status} onChange={(event) => changeStatus(task.id, event.target.value)}><option value="pending">To do</option><option value="followup">In progress</option><option value="submitted">In review</option><option value="closed">Completed</option><option value="not_required">Not required</option></select></div></div>)}
+      </div> : <EmptyState compact icon="checkCircle" title="No priority tasks" description="You are all caught up. New urgent work will appear here." />}
+    </section>
   </AppShell>;
 }
