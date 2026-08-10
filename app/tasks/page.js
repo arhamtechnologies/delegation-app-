@@ -11,6 +11,14 @@ import { supabaseBrowser } from '../../lib/supabase-browser';
 
 const emptyForm = { title: '', description: '', assignee_id: '', eta: '', start_date: '', priority: 'normal', category: 'General', instructions: '', proof_required: true, completion_notes: null, attachments: [] };
 
+function getLocalDateInputValue() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function TaskSummarySkeleton() {
   return <div className="inline-stat inline-stat-loading" aria-hidden="true"><span className="inline-stat-icon skeleton-shimmer" /><div><span className="summary-value-placeholder skeleton-shimmer" /><span className="summary-label-placeholder skeleton-shimmer" /></div></div>;
 }
@@ -26,6 +34,11 @@ export default function Tasks() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  function openCreateModal() {
+    setForm({ ...emptyForm, start_date: getLocalDateInputValue() });
+    setModalOpen(true);
+  }
 
   async function load() {
     setLoading(true);
@@ -68,7 +81,7 @@ export default function Tasks() {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    if (taskData && !loading && canCreateTasks(taskData.role) && new URLSearchParams(window.location.search).get('create') === '1') setModalOpen(true);
+    if (taskData && !loading && canCreateTasks(taskData.role) && new URLSearchParams(window.location.search).get('create') === '1') openCreateModal();
   }, [loading, taskData]);
 
   const tasks = useMemo(() => taskData?.tasks || [], [taskData]);
@@ -104,7 +117,7 @@ export default function Tasks() {
     await load();
   }
 
-  return <AppShell title={taskData ? 'Tasks' : 'Loading tasks'} eyebrow="Workspace / Tasks" description="Create, prioritize, and keep every assignment moving." actions={canCreate ? <button className="button button-primary" type="button" onClick={() => setModalOpen(true)}><Icon name="plus" size={17} />Create task</button> : null}>
+  return <AppShell title={taskData ? 'Tasks' : 'Loading tasks'} eyebrow="Workspace / Tasks" description="Create, prioritize, and keep every assignment moving." actions={canCreate ? <button className="button button-primary" type="button" onClick={openCreateModal}><Icon name="plus" size={17} />Create task</button> : null}>
     {!taskData ? <section className="task-summary-row"><TaskSummarySkeleton /><TaskSummarySkeleton /><TaskSummarySkeleton /><TaskSummarySkeleton /></section> : <section className="task-summary-row"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="clipboard" size={16} /></span><div><strong>{tasks.length}</strong><span>Total tasks</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{tasks.filter(taskIsOverdue).length}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="message" size={16} /></span><div><strong>{tasks.filter((task) => task.status === 'submitted').length}</strong><span>In review</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{tasks.filter((task) => task.status === 'closed').length}</strong><span>Completed</span></div></div></section>}
     {message && <div className="inline-alert success"><Icon name="checkCircle" size={16} />{message}</div>}
     {error && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
