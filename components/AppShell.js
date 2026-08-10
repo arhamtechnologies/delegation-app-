@@ -17,6 +17,7 @@ const managerNavItems = [
 ];
 
 const doerNavItems = [
+  { href: '/dashboard', label: 'Dashboard', icon: 'grid', section: 'Workspace' },
   { href: '/tasks', label: 'My Tasks', icon: 'clipboard', section: 'Workspace' },
   { href: '/notifications', label: 'Notifications', icon: 'bell', section: 'Workspace', notification: true },
 ];
