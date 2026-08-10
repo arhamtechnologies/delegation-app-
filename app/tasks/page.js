@@ -6,8 +6,7 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, Modal, PriorityBadge, SectionHeader, StatusBadge, formatDate } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { createTask, getTasks, taskIsOverdue, updateTaskStatus } from '../../lib/task-data';
-import { supabaseBrowser } from '../../lib/supabase-browser';
+import { createTask, getTaskAssignees, getTasks, taskIsOverdue, updateTaskStatus } from '../../lib/task-data';
 
 const emptyForm = { title: '', description: '', assignee_id: '', eta: '', start_date: '', priority: 'normal', category: 'General', instructions: '', proof_required: true, completion_notes: null, attachments: [] };
 
@@ -57,7 +56,7 @@ export default function Tasks() {
     }
 
     const employeeRequest = canCreateTasks(employee.role)
-      ? supabaseBrowser().from('employees').select('id,name,active').eq('active', true).order('name')
+      ? getTaskAssignees()
       : Promise.resolve({ data: [], error: null });
     const [taskResponse, employeeResponse] = await Promise.all([
       getTasks({ limit: 200 }),
