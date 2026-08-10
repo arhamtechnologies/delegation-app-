@@ -30,7 +30,7 @@ export default function Employees() {
       setLoading(false);
       return;
     }
-    const { data } = await supabaseBrowser().from('employees').select('*').order('name');
+    const { data } = await supabaseBrowser().from('employees').select('id,name,email,mobile,role,department_id,active,auth_user_id').order('name');
     setRows(data || []);
     setLoading(false);
   }

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { supabaseBrowser } from '../lib/supabase-browser';
+import { getCurrentEmployee } from '../lib/auth';
 import { getUnreadNotificationCount } from '../lib/notifications';
 import { Icon } from './Icons';
 
@@ -35,7 +36,7 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
     let active = true;
     const supabase = supabaseBrowser();
     (async () => {
-      const { data: { user } = {}, error: authError } = await supabase.auth.getUser();
+      const { user, employee, error: authError } = await getCurrentEmployee();
       if (!user) {
         if (authError && authError.message !== 'Auth session missing!') console.error('Unable to verify the current session.', { code: authError.code, message: authError.message });
         if (active) {
@@ -43,10 +44,7 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
         }
         return;
       }
-      const [{ data: employee }, { count, error: notificationError }] = await Promise.all([
-        supabase.from('employees').select('id,name,email,role,department_id,active,must_change_password').eq('auth_user_id', user.id).maybeSingle(),
-        getUnreadNotificationCount(),
-      ]);
+      const { count, error: notificationError } = await getUnreadNotificationCount();
       if (notificationError) console.error('Unable to load unread notification count.', { code: notificationError.code, message: notificationError.message });
       if (!employee) {
         if (active) {

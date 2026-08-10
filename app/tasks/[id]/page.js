@@ -40,7 +40,7 @@ export default function TaskDetail() {
     if (!user) return;
     const [{ data: taskData, error: taskError }, { data: updateRows = [] } = {}] = await Promise.all([
       getTask(id),
-      supabaseBrowser().from('task_updates').select('*').eq('task_id', id).order('created_at', { ascending: true }),
+      supabaseBrowser().from('task_updates').select('id,update_type,remark,proof_url,created_at').eq('task_id', id).order('created_at', { ascending: true }),
     ]);
     setTask(taskData || null);
     setCompletionNotes(taskData?.completion_notes || '');

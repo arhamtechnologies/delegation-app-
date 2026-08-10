@@ -23,7 +23,7 @@ export default function MIS() {
     if (!user) return;
     const [{ data: reportRows = [] } = {}, { data: taskRows = [] } = {}, { data: eligibleEmployees = [] } = {}] = await Promise.all([
       supabaseBrowser().from('employee_mis').select('employee_id,employee_name,total_tasks,pending_tasks,delayed_tasks,closed_tasks,on_time_percent').order('employee_name'),
-      getTasks({ limit: 500 }),
+      getTasks({ limit: 500, select: 'status,eta,completed_at' }),
       getTaskAssignees(),
     ]);
     const eligibleEmployeeIds = new Set((eligibleEmployees || []).map((employee) => employee.id));

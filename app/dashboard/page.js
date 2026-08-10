@@ -1,18 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, MetricCard, PriorityBadge, StatusBadge, formatDate } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { getTasks, taskIsDueSoon, taskIsOverdue, updateTaskStatus } from '../../lib/task-data';
+import { getDashboardData, taskIsOverdue, updateTaskStatus } from '../../lib/task-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
-
-function isToday(value) {
-  if (!value) return false;
-  return new Date(value).toDateString() === new Date().toDateString();
-}
 
 function MetricSkeleton() {
   return <div className="metric-card metric-card-loading" aria-hidden="true"><div className="metric-card-top"><span className="metric-icon skeleton-shimmer" /></div><div className="metric-value"><span className="metric-value-placeholder skeleton-shimmer" /></div><div className="metric-label"><span className="metric-label-placeholder skeleton-shimmer" /></div></div>;
@@ -44,15 +39,15 @@ export default function Dashboard() {
     }
 
     const manager = ['super_admin', 'assigner', 'ea'].includes(employee.role);
-    const [taskResponse, employeeResponse] = await Promise.all([
-      getTasks({ limit: 100 }),
+    const [dashboardResponse, employeeResponse] = await Promise.all([
+      getDashboardData(manager),
       manager
         ? supabaseBrowser().from('employees').select('id', { count: 'exact', head: true }).eq('active', true)
         : Promise.resolve({ count: null, error: null }),
     ]);
 
-    if (taskResponse.error || employeeResponse.error) {
-      setError(taskResponse.error?.message || employeeResponse.error?.message || 'Unable to load dashboard data. Please try again.');
+    if (dashboardResponse.error || employeeResponse.error) {
+      setError(dashboardResponse.error?.message || employeeResponse.error?.message || 'Unable to load dashboard data. Please try again.');
       setLoading(false);
       return;
     }
@@ -60,7 +55,8 @@ export default function Dashboard() {
     setDashboardData({
       name: employee.name,
       role: employee.role,
-      tasks: taskResponse.data || [],
+      metrics: dashboardResponse.data.metrics,
+      priorityTasks: dashboardResponse.data.priorityTasks,
       activeEmployees: manager ? employeeResponse.count || 0 : null,
     });
     setLoading(false);
@@ -68,18 +64,9 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, []);
 
-  const tasks = useMemo(() => dashboardData?.tasks || [], [dashboardData]);
   const manager = Boolean(dashboardData && ['super_admin', 'assigner', 'ea'].includes(dashboardData.role));
-  const metrics = useMemo(() => ({
-    total: tasks.length,
-    open: tasks.filter((task) => !['closed', 'not_required'].includes(task.status)).length,
-    overdue: tasks.filter(taskIsOverdue).length,
-    dueSoon: tasks.filter(taskIsDueSoon).length,
-    dueToday: tasks.filter((task) => isToday(task.eta) && !['closed', 'not_required'].includes(task.status)).length,
-    completed: tasks.filter((task) => task.status === 'closed').length,
-  }), [tasks]);
-
-  const priorityTasks = useMemo(() => tasks.filter((task) => taskIsOverdue(task) || taskIsDueSoon(task)).slice(0, 8), [tasks]);
+  const metrics = dashboardData?.metrics || {};
+  const priorityTasks = dashboardData?.priorityTasks || [];
 
   async function changeStatus(id, status) {
     await updateTaskStatus(id, status);
