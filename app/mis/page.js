@@ -5,7 +5,7 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, MetricCard, ProgressBar, SectionHeader } from '../../components/UI';
 import { getAuthenticatedUser } from '../../lib/auth';
-import { getTasks, taskIsOverdue } from '../../lib/task-data';
+import { getTaskAssignees, getTasks, taskIsOverdue } from '../../lib/task-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
 export default function MIS() {
@@ -21,11 +21,13 @@ export default function MIS() {
     setLoading(true);
     const user = await getAuthenticatedUser();
     if (!user) return;
-    const [{ data: reportRows = [] } = {}, { data: taskRows = [] } = {}] = await Promise.all([
+    const [{ data: reportRows = [] } = {}, { data: taskRows = [] } = {}, { data: eligibleEmployees = [] } = {}] = await Promise.all([
       supabaseBrowser().from('employee_mis').select('employee_id,employee_name,total_tasks,pending_tasks,delayed_tasks,closed_tasks,on_time_percent').order('employee_name'),
       getTasks({ limit: 500 }),
+      getTaskAssignees(),
     ]);
-    setRows(reportRows || []);
+    const eligibleEmployeeIds = new Set((eligibleEmployees || []).map((employee) => employee.id));
+    setRows((reportRows || []).filter((row) => eligibleEmployeeIds.has(row.employee_id)));
     setTasks(taskRows || []);
     setLoading(false);
   }
