@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabaseBrowser } from '../lib/supabase-browser';
 import { getUnreadNotificationCount } from '../lib/notifications';
 import { Icon } from './Icons';
@@ -29,6 +29,7 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
   const [authState, setAuthState] = useState('checking');
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
+  const redirectingToLogin = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -39,7 +40,6 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
         if (authError && authError.message !== 'Auth session missing!') console.error('Unable to verify the current session.', { code: authError.code, message: authError.message });
         if (active) {
           setAuthState('signed_out');
-          router.replace('/login');
         }
         return;
       }
@@ -52,7 +52,6 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
         if (active) {
           setProfile(null);
           setAuthState('signed_out');
-          router.replace('/login');
         }
         return;
       }
@@ -75,7 +74,6 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
         setProfile(null);
         setUnreadCount(0);
         setAuthState('signed_out');
-        router.replace('/login');
       }
     });
     return () => { active = false; subscription.unsubscribe(); };
@@ -92,6 +90,12 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
   }, []);
 
   useEffect(() => { setMenuOpen(false); }, [pathname]);
+
+  useEffect(() => {
+    if (authState !== 'signed_out' || pathname === '/login' || redirectingToLogin.current) return;
+    redirectingToLogin.current = true;
+    router.replace('/login');
+  }, [authState, pathname, router]);
 
   useEffect(() => {
     const manager = ['super_admin', 'assigner', 'ea'].includes(profile?.role);
@@ -113,13 +117,11 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
     setProfile(null);
     setUnreadCount(0);
     setAuthState('signed_out');
-    router.replace('/login');
-    router.refresh();
   }
 
   if (authState === 'checking') return <div className="auth-loading-shell" role="status">Checking your session...</div>;
   if (authState === 'password_change_required') return <div className="auth-loading-shell" role="status">Your password needs to be updated...</div>;
-  if (authState === 'signed_out') return null;
+  if (authState === 'signed_out') return <div className="auth-loading-shell" role="status">Signing you out...</div>;
 
   const isManager = ['super_admin', 'assigner', 'ea'].includes(profile?.role);
   const managerRoute = pathname === '/employees' || pathname.startsWith('/employees/') || pathname === '/mis' || pathname.startsWith('/mis/');
