@@ -22,7 +22,7 @@ export default function MIS() {
     const user = await getAuthenticatedUser();
     if (!user) return;
     const [{ data: reportRows = [] } = {}, { data: taskRows = [] } = {}] = await Promise.all([
-      supabaseBrowser().from('employee_mis').select('*').order('employee_name'),
+      supabaseBrowser().from('employee_mis').select('employee_id,employee_name,total_tasks,pending_tasks,delayed_tasks,closed_tasks,on_time_percent').order('employee_name'),
       getTasks({ limit: 500 }),
     ]);
     setRows(reportRows || []);
