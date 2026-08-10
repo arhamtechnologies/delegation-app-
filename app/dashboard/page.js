@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
-import { EmptyState, MetricCard, PriorityBadge, StatusBadge, formatDate } from '../../components/UI';
+import { EmptyState, MetricCard, PriorityBadge, formatDate } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
 import { getDashboardData, taskIsOverdue, updateTaskStatus } from '../../lib/task-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
@@ -15,6 +15,42 @@ function MetricSkeleton() {
 
 function IntroSkeleton() {
   return <section className="overview-intro overview-intro-loading" aria-label="Loading dashboard"><p><span className="overview-greeting-placeholder skeleton-shimmer" /></p><span className="overview-subtitle-placeholder skeleton-shimmer" /></section>;
+}
+
+function getTaskDueDisplay(task) {
+  if (!task.eta) return { label: 'No due date', overdue: false };
+  const dueDate = new Date(task.eta);
+  if (Number.isNaN(dueDate.getTime())) return { label: 'No due date', overdue: false };
+  const today = new Date();
+  const isToday = dueDate.getFullYear() === today.getFullYear()
+    && dueDate.getMonth() === today.getMonth()
+    && dueDate.getDate() === today.getDate();
+  return {
+    label: isToday ? 'Due today' : `Due ${formatDate(task.eta, { month: 'short', day: 'numeric' })}`,
+    overdue: taskIsOverdue(task),
+  };
+}
+
+function DashboardTaskRow({ task, onStatusChange }) {
+  const due = getTaskDueDisplay(task);
+  return <li className="dashboard-task-row">
+    <div className="dashboard-task-primary">
+      <Link href={`/tasks/${task.id}`} className="dashboard-task-title">{task.title}</Link>
+      {task.category && <span className="dashboard-task-category">{task.category}</span>}
+    </div>
+    <div className="dashboard-task-meta">
+      <div className="dashboard-task-assignee"><span>Assigned to</span><strong>{task.assignee?.name || 'Unassigned'}</strong></div>
+      <PriorityBadge priority={task.priority} />
+      <select className={`dashboard-task-status-select dashboard-task-status-${task.status}`} aria-label={`Change status for ${task.title}`} value={task.status} onChange={(event) => onStatusChange(task.id, event.target.value)}>
+        <option value="pending">To do</option>
+        <option value="followup">In progress</option>
+        <option value="submitted">In review</option>
+        <option value="closed">Completed</option>
+        <option value="not_required">Not required</option>
+      </select>
+      <span className={`dashboard-task-due${due.overdue ? ' overdue' : ''}`}>{due.label}</span>
+    </div>
+  </li>;
 }
 
 export default function Dashboard() {
@@ -84,10 +120,7 @@ export default function Dashboard() {
     </section>
     <section className="panel overview-panel">
       <div className="simple-section-heading"><div><h2>{dashboardData ? (manager ? 'Tasks needing attention' : 'My Tasks') : 'Loading tasks'}</h2><p>{dashboardData ? (manager ? 'Overdue and due-soon work appears here first.' : 'Your overdue and due-soon work appears here first.') : 'Loading your latest task summary.'}</p></div><Link className="text-link" href="/tasks">View all <Icon name="arrowUpRight" size={14} /></Link></div>
-      {!dashboardData ? <div className="overview-loading-list" aria-label="Loading tasks"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div> : priorityTasks.length ? <div className="simple-task-table">
-        <div className="simple-table-heading"><span>Task</span><span>Assignee</span><span>Priority</span><span>Status</span><span>Due date</span><span /></div>
-        {priorityTasks.map((task) => <div className="simple-task-row" key={task.id}><div><Link href={`/tasks/${task.id}`} className="task-title">{task.title}</Link><small>{task.category || 'General'}</small></div><span>{task.assignee?.name || 'Unassigned'}</span><PriorityBadge priority={task.priority} /><StatusBadge status={task.status} compact /><span className={taskIsOverdue(task) ? 'due-date overdue' : 'due-date'}>{formatDate(task.eta, { month: 'short', day: 'numeric' })}</span><div className="simple-row-action"><select className="status-select" aria-label={`Change status for ${task.title}`} value={task.status} onChange={(event) => changeStatus(task.id, event.target.value)}><option value="pending">To do</option><option value="followup">In progress</option><option value="submitted">In review</option><option value="closed">Completed</option><option value="not_required">Not required</option></select></div></div>)}
-      </div> : <EmptyState compact icon="checkCircle" title="No priority tasks" description="You are all caught up. New urgent work will appear here." />}
+      {!dashboardData ? <div className="overview-loading-list" aria-label="Loading tasks"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div> : priorityTasks.length ? <ul className="dashboard-task-list">{priorityTasks.map((task) => <DashboardTaskRow key={task.id} task={task} onStatusChange={changeStatus} />)}</ul> : <EmptyState compact icon="checkCircle" title="No priority tasks" description="You are all caught up. New urgent work will appear here." />}
     </section>
   </AppShell>;
 }
