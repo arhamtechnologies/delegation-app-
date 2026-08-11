@@ -395,41 +395,6 @@ h1, h2, h3, p { margin-top: 0; }
   white-space: nowrap;
 }
 
-.dashboard-task-status-select {
-  min-height: 29px;
-  max-width: 125px;
-  padding: 0 22px 0 9px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.dashboard-task-status-pending,
-.dashboard-task-status-not_required {
-  border-color: #e2e6ee;
-  background: #f0f2f6;
-  color: #718096;
-}
-
-.dashboard-task-status-followup {
-  border-color: #d6e7ff;
-  background: #eaf3ff;
-  color: #347edb;
-}
-
-.dashboard-task-status-submitted {
-  border-color: #ddd8ff;
-  background: #f0edff;
-  color: #6559e6;
-}
-
-.dashboard-task-status-closed {
-  border-color: #cdeee3;
-  background: #e5f8f2;
-  color: #1b9d7f;
-}
-
 .dashboard-task-due {
   color: var(--muted-strong);
   font-size: 10px;
@@ -440,6 +405,34 @@ h1, h2, h3, p { margin-top: 0; }
 .dashboard-task-due.overdue {
   color: var(--red);
   font-weight: 750;
+}
+
+.automatic-status-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 22px 0 30px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.automatic-status-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.automatic-status-panel p {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .inline-stat-loading .inline-stat-icon {

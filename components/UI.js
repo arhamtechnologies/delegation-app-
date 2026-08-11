@@ -1,13 +1,11 @@
 import Link from 'next/link';
 import { Icon } from './Icons';
+import { getTaskStatus } from '../lib/task-data';
 
 export const statusMeta = {
-  pending: { label: 'To do', tone: 'slate', icon: 'clock' },
-  followup: { label: 'In progress', tone: 'blue', icon: 'activity' },
-  delayed: { label: 'Delayed', tone: 'orange', icon: 'warning' },
-  submitted: { label: 'In review', tone: 'purple', icon: 'message' },
-  closed: { label: 'Completed', tone: 'green', icon: 'checkCircle' },
-  not_required: { label: 'Not required', tone: 'slate', icon: 'close' },
+  pending: { label: 'Pending', tone: 'blue', icon: 'clock' },
+  overdue: { label: 'Overdue', tone: 'red', icon: 'warning' },
+  completed: { label: 'Completed', tone: 'green', icon: 'checkCircle' },
 };
 
 export const priorityMeta = {
@@ -77,7 +75,7 @@ export function relativeTime(value) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export function TaskRow({ task, onStatusChange, canEdit = true }) {
-  const due = task.eta && new Date(task.eta) < new Date() && task.status !== 'closed';
-  return <div className="task-row"><div className="task-row-main"><span className="task-check"><Icon name={task.status === 'closed' ? 'checkCircle' : 'clipboard'} size={18} /></span><div className="task-copy"><Link href={`/tasks/${task.id}`} className="task-title">{task.title}</Link><div className="task-subline"><span>{task.assignee?.name || 'Unassigned'}</span><span className="dot-separator" />{task.category || 'General'}</div></div></div><div className="task-row-meta"><PriorityBadge priority={task.priority} /><StatusBadge status={task.status} compact /><span className={due ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{formatDate(task.eta, { month: 'short', day: 'numeric' })}</span>{canEdit && <select className="status-select" aria-label={`Change status for ${task.title}`} value={task.status} onChange={(event) => onStatusChange?.(task.id, event.target.value)}><option value="pending">To do</option><option value="followup">In progress</option><option value="submitted">In review</option><option value="closed">Completed</option><option value="not_required">Not required</option></select>}</div></div>;
+export function TaskRow({ task }) {
+  const status = getTaskStatus(task);
+  return <div className="task-row"><div className="task-row-main"><span className="task-check"><Icon name={status === 'completed' ? 'checkCircle' : 'clipboard'} size={18} /></span><div className="task-copy"><Link href={`/tasks/${task.id}`} className="task-title">{task.title}</Link><div className="task-subline"><span>{task.assignee?.name || 'Unassigned'}</span><span className="dot-separator" />{task.category || 'General'}</div></div></div><div className="task-row-meta"><PriorityBadge priority={task.priority} /><StatusBadge status={status} compact /><span className={status === 'overdue' ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{formatDate(task.eta, { month: 'short', day: 'numeric' })}</span></div></div>;
 }

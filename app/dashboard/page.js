@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
-import { EmptyState, MetricCard, PriorityBadge, formatDate } from '../../components/UI';
+import { EmptyState, MetricCard, PriorityBadge, StatusBadge, formatDate } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { getDashboardData, taskIsOverdue, updateTaskStatus } from '../../lib/task-data';
+import { getDashboardData, getTaskStatus } from '../../lib/task-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
 function MetricSkeleton() {
@@ -27,11 +27,11 @@ function getTaskDueDisplay(task) {
     && dueDate.getDate() === today.getDate();
   return {
     label: isToday ? 'Due today' : `Due ${formatDate(task.eta, { month: 'short', day: 'numeric' })}`,
-    overdue: taskIsOverdue(task),
+    overdue: getTaskStatus(task) === 'overdue',
   };
 }
 
-function DashboardTaskRow({ task, onStatusChange }) {
+function DashboardTaskRow({ task }) {
   const due = getTaskDueDisplay(task);
   return <li className="dashboard-task-row">
     <div className="dashboard-task-primary">
@@ -41,13 +41,7 @@ function DashboardTaskRow({ task, onStatusChange }) {
     <div className="dashboard-task-meta">
       <div className="dashboard-task-assignee"><span>Assigned to</span><strong>{task.assignee?.name || 'Unassigned'}</strong></div>
       <PriorityBadge priority={task.priority} />
-      <select className={`dashboard-task-status-select dashboard-task-status-${task.status}`} aria-label={`Change status for ${task.title}`} value={task.status} onChange={(event) => onStatusChange(task.id, event.target.value)}>
-        <option value="pending">To do</option>
-        <option value="followup">In progress</option>
-        <option value="submitted">In review</option>
-        <option value="closed">Completed</option>
-        <option value="not_required">Not required</option>
-      </select>
+      <StatusBadge status={getTaskStatus(task)} compact />
       <span className={`dashboard-task-due${due.overdue ? ' overdue' : ''}`}>{due.label}</span>
     </div>
   </li>;
@@ -104,11 +98,6 @@ export default function Dashboard() {
   const metrics = dashboardData?.metrics || {};
   const priorityTasks = dashboardData?.priorityTasks || [];
 
-  async function changeStatus(id, status) {
-    await updateTaskStatus(id, status);
-    await load();
-  }
-
   const title = dashboardData ? (manager ? 'Dashboard' : 'My Tasks') : 'Loading workspace';
   const canCreate = dashboardData ? canCreateTasks(dashboardData.role) : false;
 
@@ -116,11 +105,11 @@ export default function Dashboard() {
     {!dashboardData ? <IntroSkeleton /> : <section className="overview-intro"><p>Good morning, <strong>{dashboardData.name}</strong></p><span>Here is what needs your attention.</span></section>}
     {error && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
     <section className="metric-grid overview-metrics" aria-label="Task summary">
-      {!dashboardData ? <><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /></> : manager ? <><MetricCard label="Total tasks" value={metrics.total} href="/tasks" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Due soon" value={metrics.dueSoon} tone="purple" href="/tasks" /><MetricCard label="Active employees" value={dashboardData.activeEmployees} tone="mint" href="/employees" /></> : <><MetricCard label="My open tasks" value={metrics.open} href="/tasks" /><MetricCard label="Due today" value={metrics.dueToday} tone="purple" href="/tasks" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Completed" value={metrics.completed} tone="mint" href="/tasks?status=closed" /></>}
+    {!dashboardData ? <><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /></> : manager ? <><MetricCard label="Total tasks" value={metrics.total} href="/tasks" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Due soon" value={metrics.dueSoon} tone="purple" href="/tasks" /><MetricCard label="Active employees" value={dashboardData.activeEmployees} tone="mint" href="/employees" /></> : <><MetricCard label="My open tasks" value={metrics.open} href="/tasks" /><MetricCard label="Due today" value={metrics.dueToday} tone="purple" href="/tasks" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Completed" value={metrics.completed} tone="mint" href="/tasks?status=completed" /></>}
     </section>
     <section className="panel overview-panel">
       <div className="simple-section-heading"><div><h2>{dashboardData ? (manager ? 'Tasks needing attention' : 'My Tasks') : 'Loading tasks'}</h2><p>{dashboardData ? (manager ? 'Overdue and due-soon work appears here first.' : 'Your overdue and due-soon work appears here first.') : 'Loading your latest task summary.'}</p></div><Link className="text-link" href="/tasks">View all <Icon name="arrowUpRight" size={14} /></Link></div>
-      {!dashboardData ? <div className="overview-loading-list" aria-label="Loading tasks"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div> : priorityTasks.length ? <ul className="dashboard-task-list">{priorityTasks.map((task) => <DashboardTaskRow key={task.id} task={task} onStatusChange={changeStatus} />)}</ul> : <EmptyState compact icon="checkCircle" title="No priority tasks" description="You are all caught up. New urgent work will appear here." />}
+      {!dashboardData ? <div className="overview-loading-list" aria-label="Loading tasks"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div> : priorityTasks.length ? <ul className="dashboard-task-list">{priorityTasks.map((task) => <DashboardTaskRow key={task.id} task={task} />)}</ul> : <EmptyState compact icon="checkCircle" title="No priority tasks" description="You are all caught up. New urgent work will appear here." />}
     </section>
   </AppShell>;
 }

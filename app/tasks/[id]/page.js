@@ -5,12 +5,10 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '../../../components/AppShell';
 import { Icon } from '../../../components/Icons';
-import { EmptyState, PriorityBadge, SectionHeader, StatusBadge, formatDate, formatDateTime, relativeTime, statusMeta } from '../../../components/UI';
+import { EmptyState, PriorityBadge, SectionHeader, StatusBadge, formatDate, formatDateTime, relativeTime } from '../../../components/UI';
 import { getAuthenticatedUser } from '../../../lib/auth';
-import { getTask, updateTaskStatus } from '../../../lib/task-data';
+import { getTask, getTaskStatus, setTaskCompletion } from '../../../lib/task-data';
 import { supabaseBrowser } from '../../../lib/supabase-browser';
-
-const workflow = ['pending', 'followup', 'submitted', 'closed'];
 
 function attachmentDetails(value, index) {
   if (typeof value === 'string') return { label: value, href: value };
@@ -51,13 +49,12 @@ export default function TaskDetail() {
 
   useEffect(() => { load(); }, [load]);
 
-  const currentIndex = useMemo(() => Math.max(0, workflow.indexOf(task?.status || 'pending')), [task]);
   const attachments = useMemo(() => (Array.isArray(task?.attachments) ? task.attachments : []).map(attachmentDetails), [task]);
 
-  async function changeStatus(status) {
+  async function toggleCompletion() {
     setSaving(true);
     setError('');
-    const { error: updateError } = await updateTaskStatus(id, status);
+    const { error: updateError } = await setTaskCompletion(id, getTaskStatus(task) !== 'completed');
     if (updateError) setError(updateError.message);
     else await load();
     setSaving(false);
@@ -94,19 +91,19 @@ export default function TaskDetail() {
   if (loading) return <AppShell title="Task details" eyebrow="Workspace / Tasks"><div className="panel detail-loading"><div className="loading-list"><span /><span /><span /></div></div></AppShell>;
   if (!task) return <AppShell title="Task not found" eyebrow="Workspace / Tasks"><EmptyState icon="clipboard" title="This task is unavailable" description={error || 'It may have been deleted or you may not have access to it.'} action="Back to tasks" href="/tasks" /></AppShell>;
 
-  return <AppShell title="Task details" eyebrow="Workspace / Tasks" actions={<><Link className="button button-ghost button-small" href="/tasks"><Icon name="chevronRight" size={15} className="flip-icon" />Back to tasks</Link><button className="button button-primary button-small" type="button" onClick={() => changeStatus(task.status === 'closed' ? 'pending' : 'closed')} disabled={saving}><Icon name={task.status === 'closed' ? 'activity' : 'check'} size={16} />{task.status === 'closed' ? 'Reopen task' : 'Mark complete'}</button></>}>
+  const taskStatus = getTaskStatus(task);
+  return <AppShell title="Task details" eyebrow="Workspace / Tasks" actions={<><Link className="button button-ghost button-small" href="/tasks"><Icon name="chevronRight" size={15} className="flip-icon" />Back to tasks</Link><button className="button button-primary button-small" type="button" onClick={toggleCompletion} disabled={saving}><Icon name={taskStatus === 'completed' ? 'activity' : 'check'} size={16} />{taskStatus === 'completed' ? 'Reopen task' : 'Mark complete'}</button></>}>
     {error && <div className="inline-alert error"><Icon name="warning" size={16} />{error}</div>}
     <div className="detail-layout">
       <section className="panel task-detail-main">
-        <div className="detail-topline"><div className="detail-tags"><PriorityBadge priority={task.priority} /><StatusBadge status={task.status} /></div><span className="detail-updated">Updated {relativeTime(task.updated_at || task.created_at)}</span></div>
+        <div className="detail-topline"><div className="detail-tags"><PriorityBadge priority={task.priority} /></div><span className="detail-updated">Updated {relativeTime(task.updated_at || task.created_at)}</span></div>
         <h2 className="detail-title">{task.title}</h2>
         <p className="detail-description">{task.description || 'No description has been added to this task.'}</p>
-        <div className="workflow"><div className="workflow-line" /><div className="workflow-steps">{workflow.map((step, index) => <button className={`workflow-step${index <= currentIndex ? ' complete' : ''}${step === task.status ? ' current' : ''}`} key={step} type="button" onClick={() => changeStatus(step)} disabled={saving}><span><Icon name={index < currentIndex ? 'check' : statusMeta[step].icon} size={15} /></span><small>{statusMeta[step].label}</small></button>)}</div></div>
+        <div className="automatic-status-panel"><span className="automatic-status-label">Automatic status</span><StatusBadge status={taskStatus} /><p>{taskStatus === 'completed' ? 'This task has been marked complete.' : taskStatus === 'overdue' ? 'The due date has passed and the task is not complete.' : 'The task is due today or in the future.'}</p></div>
         <div className="detail-metadata">
           <div><span className="metadata-icon"><Icon name="user" size={16} /></span><span><small>Assigned to</small><strong>{task.assignee?.name || 'Unassigned'}</strong></span></div>
           <div><span className="metadata-icon"><Icon name="calendar" size={16} /></span><span><small>Start date</small><strong>{formatDateTime(task.start_date)}</strong></span></div>
           <div><span className="metadata-icon"><Icon name="calendar" size={16} /></span><span><small>Due date</small><strong>{formatDateTime(task.eta)}</strong></span></div>
-          <div><span className="metadata-icon"><Icon name="briefcase" size={16} /></span><span><small>Category</small><strong>{task.category || 'General'}</strong></span></div>
           <div><span className="metadata-icon"><Icon name="paperclip" size={16} /></span><span><small>Proof</small><strong>{task.proof_required ? 'Required' : 'Optional'}</strong></span></div>
         </div>
         <div className="detail-notes"><SectionHeader eyebrow="Handoff notes" title="Instructions" />{task.instructions ? <p>{task.instructions}</p> : <p className="muted-copy">No special instructions were added. Use the updates panel to add context as the work progresses.</p>}</div>
