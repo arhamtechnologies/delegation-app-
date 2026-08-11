@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
-import { EmptyState, MetricCard, PriorityBadge, StatusBadge, formatDate } from '../../components/UI';
+import { EmptyState, MetricCard, PriorityBadge, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { getDashboardData, getTaskStatus } from '../../lib/task-data';
+import { formatTaskDeadline, getDashboardData, getTaskStatus } from '../../lib/task-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
 function MetricSkeleton() {
@@ -18,15 +18,8 @@ function IntroSkeleton() {
 }
 
 function getTaskDueDisplay(task) {
-  if (!task.eta) return { label: 'No due date', overdue: false };
-  const dueDate = new Date(task.eta);
-  if (Number.isNaN(dueDate.getTime())) return { label: 'No due date', overdue: false };
-  const today = new Date();
-  const isToday = dueDate.getFullYear() === today.getFullYear()
-    && dueDate.getMonth() === today.getMonth()
-    && dueDate.getDate() === today.getDate();
   return {
-    label: isToday ? 'Due today' : `Due ${formatDate(task.eta, { month: 'short', day: 'numeric' })}`,
+    label: formatTaskDeadline(task, { relative: true }),
     overdue: getTaskStatus(task) === 'overdue',
   };
 }

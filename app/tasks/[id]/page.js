@@ -7,7 +7,7 @@ import AppShell from '../../../components/AppShell';
 import { Icon } from '../../../components/Icons';
 import { EmptyState, PriorityBadge, SectionHeader, StatusBadge, formatDate, formatDateTime, relativeTime } from '../../../components/UI';
 import { getAuthenticatedUser } from '../../../lib/auth';
-import { getTask, getTaskStatus, setTaskCompletion } from '../../../lib/task-data';
+import { formatTaskDeadline, getTask, getTaskStatus, setTaskCompletion } from '../../../lib/task-data';
 import { supabaseBrowser } from '../../../lib/supabase-browser';
 
 function attachmentDetails(value, index) {
@@ -102,8 +102,8 @@ export default function TaskDetail() {
         <div className="automatic-status-panel"><span className="automatic-status-label">Automatic status</span><StatusBadge status={taskStatus} /><p>{taskStatus === 'completed' ? 'This task has been marked complete.' : taskStatus === 'overdue' ? 'The due date has passed and the task is not complete.' : 'The task is due today or in the future.'}</p></div>
         <div className="detail-metadata">
           <div><span className="metadata-icon"><Icon name="user" size={16} /></span><span><small>Assigned to</small><strong>{task.assignee?.name || 'Unassigned'}</strong></span></div>
-          <div><span className="metadata-icon"><Icon name="calendar" size={16} /></span><span><small>Start date</small><strong>{formatDateTime(task.start_date)}</strong></span></div>
-          <div><span className="metadata-icon"><Icon name="calendar" size={16} /></span><span><small>Due date</small><strong>{formatDateTime(task.eta)}</strong></span></div>
+          <div><span className="metadata-icon"><Icon name="calendar" size={16} /></span><span><small>Start date</small><strong>{formatDate(task.start_date, { month: 'short', day: 'numeric', year: 'numeric' })}</strong></span></div>
+          <div><span className="metadata-icon"><Icon name="calendar" size={16} /></span><span><small>Due date</small><strong>{formatTaskDeadline(task, { includeYear: true })}</strong></span></div>
           <div><span className="metadata-icon"><Icon name="paperclip" size={16} /></span><span><small>Proof</small><strong>{task.proof_required ? 'Required' : 'Optional'}</strong></span></div>
         </div>
         <div className="detail-notes"><SectionHeader eyebrow="Handoff notes" title="Instructions" />{task.instructions ? <p>{task.instructions}</p> : <p className="muted-copy">No special instructions were added. Use the updates panel to add context as the work progresses.</p>}</div>

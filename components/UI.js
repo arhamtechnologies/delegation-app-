@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Icon } from './Icons';
-import { getTaskStatus } from '../lib/task-data';
+import { formatTaskDeadline, getTaskStatus } from '../lib/task-data';
 
 export const statusMeta = {
   pending: { label: 'Pending', tone: 'blue', icon: 'clock' },
@@ -77,5 +77,5 @@ export function relativeTime(value) {
 
 export function TaskRow({ task }) {
   const status = getTaskStatus(task);
-  return <div className="task-row"><div className="task-row-main"><span className="task-check"><Icon name={status === 'completed' ? 'checkCircle' : 'clipboard'} size={18} /></span><div className="task-copy"><Link href={`/tasks/${task.id}`} className="task-title">{task.title}</Link><div className="task-subline"><span>{task.assignee?.name || 'Unassigned'}</span><span className="dot-separator" />{task.category || 'General'}</div></div></div><div className="task-row-meta"><PriorityBadge priority={task.priority} /><StatusBadge status={status} compact /><span className={status === 'overdue' ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{formatDate(task.eta, { month: 'short', day: 'numeric' })}</span></div></div>;
+  return <div className="task-row"><div className="task-row-main"><span className="task-check"><Icon name={status === 'completed' ? 'checkCircle' : 'clipboard'} size={18} /></span><div className="task-copy"><Link href={`/tasks/${task.id}`} className="task-title">{task.title}</Link><div className="task-subline"><span>{task.assignee?.name || 'Unassigned'}</span><span className="dot-separator" />{task.category || 'General'}</div></div></div><div className="task-row-meta"><PriorityBadge priority={task.priority} /><StatusBadge status={status} compact /><span className={status === 'overdue' ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{formatTaskDeadline(task)}</span></div></div>;
 }
