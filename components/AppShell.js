@@ -13,14 +13,19 @@ const managerNavItems = [
   { href: '/tasks', label: 'Tasks', icon: 'clipboard', section: 'Workspace' },
   { href: '/employees', label: 'Employees', icon: 'users', section: 'Manage' },
   { href: '/mis', label: 'MIS', icon: 'chart', section: 'Manage' },
-  { href: '/notifications', label: 'Notifications', icon: 'bell', section: 'Workspace', notification: true },
 ];
 
 const doerNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid', section: 'Workspace' },
   { href: '/tasks', label: 'My Tasks', icon: 'clipboard', section: 'Workspace' },
-  { href: '/notifications', label: 'Notifications', icon: 'bell', section: 'Workspace', notification: true },
 ];
+
+function NotificationBell({ unreadCount, mobile = false }) {
+  return <Link className={`notification-bell${mobile ? ' notification-bell-mobile' : ''}`} href="/notifications" aria-label="Notifications">
+    <Icon name="bell" size={mobile ? 19 : 18} />
+    {unreadCount > 0 && <span className="notification-dot" aria-hidden="true" />}
+  </Link>;
+}
 
 export default function AppShell({ children, title, eyebrow = 'Workspace', description, actions }) {
   const router = useRouter();
@@ -133,14 +138,14 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
       <div className="sidebar-brand"><span className="brand-mark"><Icon name="sparkles" size={18} /></span><span>Delegation</span><button className="sidebar-close" type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)}><Icon name="close" /></button></div>
       <div className="workspace-switcher"><span className="workspace-dot" /><span><strong>Arham workspace</strong><small>Accountability hub</small></span><Icon name="chevronDown" size={14} /></div>
       <nav className="sidebar-nav" id="primary-navigation">
-        {sections.map((section) => <div className="nav-section" key={section}><div className="nav-section-label">{section}</div>{visibleItems.filter((item) => item.section === section).map((item) => <Link className={`nav-link${pathname === item.href || pathname.startsWith(`${item.href}/`) ? ' active' : ''}`} key={item.href} href={item.href} onClick={() => setMenuOpen(false)}><Icon name={item.icon} size={18} /><span>{item.label}</span>{item.notification && unreadCount > 0 && <span className="nav-count">{unreadCount}</span>}</Link>)}</div>)}
+        {sections.map((section) => <div className="nav-section" key={section}><div className="nav-section-label">{section}</div>{visibleItems.filter((item) => item.section === section).map((item) => <Link className={`nav-link${pathname === item.href || pathname.startsWith(`${item.href}/`) ? ' active' : ''}`} key={item.href} href={item.href} onClick={() => setMenuOpen(false)}><Icon name={item.icon} size={18} /><span>{item.label}</span></Link>)}</div>)}
       </nav>
       <div className="sidebar-footer"><div className="user-menu"><span><strong>{profile?.name || 'Workspace user'}</strong><small>{profile?.role ? profile.role.replace('_', ' ') : 'Workspace member'}</small></span></div>{signOutError && <div className="sidebar-error" role="alert"><Icon name="warning" size={14} />{signOutError}</div>}<button className="signout-button" type="button" onClick={logout} disabled={signingOut}><Icon name="logout" size={16} />{signingOut ? 'Signing out...' : 'Sign out'}</button></div>
     </aside>
     {menuOpen && <button className="nav-backdrop" type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
     <main className="main-content">
-      <header className="mobile-topbar"><button className="menu-toggle" type="button" aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><div className="mobile-brand"><span className="brand-mark"><Icon name="sparkles" size={15} /></span>Delegation</div><Link className="mobile-bell" href="/notifications"><Icon name="bell" size={19} />{unreadCount > 0 && <span>{unreadCount}</span>}</Link></header>
-      <div className="page-container"><div className="page-header"><div className="page-heading"><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{description && <p>{description}</p>}</div>{actions ? <div className="page-actions">{actions}</div> : null}</div>{children}</div>
+      <header className="mobile-topbar"><button className="menu-toggle" type="button" aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><div className="mobile-brand"><span className="brand-mark"><Icon name="sparkles" size={15} /></span>Delegation</div><NotificationBell unreadCount={unreadCount} mobile /></header>
+      <div className="page-container"><div className="page-header"><div className="page-heading"><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{description && <p>{description}</p>}</div><div className="page-header-tools"><NotificationBell unreadCount={unreadCount} />{actions ? <div className="page-actions">{actions}</div> : null}</div></div>{children}</div>
     </main>
   </div>;
 }
