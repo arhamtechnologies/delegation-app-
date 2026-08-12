@@ -34,8 +34,8 @@ export function MetricCard({ label, value, change, tone = 'blue', icon = 'activi
   return href ? <Link href={href} className="metric-card-link">{content}</Link> : content;
 }
 
-export function EmptyState({ icon = 'inbox', title, description, action, href, compact = false }) {
-  return <div className={`empty-state${compact ? ' empty-compact' : ''}`}><span className="empty-icon"><Icon name={icon} size={22} /></span><h3>{title}</h3>{description && <p>{description}</p>}{action && (href ? <Link href={href} className="button button-primary">{action}</Link> : <button className="button button-primary" type="button">{action}</button>)}</div>;
+export function EmptyState({ icon = 'inbox', title, description, action, href, onAction, compact = false }) {
+  return <div className={`empty-state${compact ? ' empty-compact' : ''}`}><span className="empty-icon"><Icon name={icon} size={22} /></span><h3>{title}</h3>{description && <p>{description}</p>}{action && (href ? <Link href={href} className="button button-primary">{action}</Link> : <button className="button button-primary" type="button" onClick={onAction}>{action}</button>)}</div>;
 }
 
 export function SectionHeader({ eyebrow, title, description, action, href }) {

@@ -11,6 +11,7 @@ import { Icon } from './Icons';
 const managerNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid', section: 'Workspace' },
   { href: '/tasks', label: 'Tasks', icon: 'clipboard', section: 'Workspace' },
+  { href: '/checklist', label: 'Checklist', icon: 'checkSquare', section: 'Workspace' },
   { href: '/employees', label: 'Employees', icon: 'users', section: 'Manage' },
   { href: '/mis', label: 'MIS', icon: 'chart', section: 'Manage' },
 ];
@@ -18,6 +19,7 @@ const managerNavItems = [
 const doerNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid', section: 'Workspace' },
   { href: '/tasks', label: 'My Tasks', icon: 'clipboard', section: 'Workspace' },
+  { href: '/checklist', label: 'Checklist', icon: 'checkSquare', section: 'Workspace' },
 ];
 
 function NotificationBell({ unreadCount, mobile = false }) {
