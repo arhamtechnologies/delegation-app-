@@ -4,6 +4,7 @@ export function Icon({ name, size = 18, strokeWidth = 1.8, className = '' }) {
   const shapes = {
     grid: <><rect {...common} x="3" y="3" width="7" height="7" rx="1" /><rect {...common} x="14" y="3" width="7" height="7" rx="1" /><rect {...common} x="3" y="14" width="7" height="7" rx="1" /><rect {...common} x="14" y="14" width="7" height="7" rx="1" /></>,
     clipboard: <><rect {...common} x="5" y="4" width="14" height="17" rx="2" /><path {...common} d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h3" /></>,
+    checkSquare: <><rect {...common} x="4" y="4" width="16" height="16" rx="3" /><path {...common} d="m8 12 2.5 2.5L16 9" /></>,
     users: <><path {...common} d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20" /><circle {...common} cx="10" cy="7" r="3" /><path {...common} d="M17 11a3 3 0 0 0 0-6M20 20v-1.5a3.5 3.5 0 0 0-2.4-3.3" /></>,
     chart: <><path {...common} d="M4 19V5M4 19h17" /><path {...common} d="m7 15 3-4 3 2 5-7" /><circle {...common} cx="18" cy="6" r="1" /></>,
     bell: <><path {...common} d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>,

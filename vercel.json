@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/checklist/generate", "schedule": "0 * * * *" }
+  ]
+}

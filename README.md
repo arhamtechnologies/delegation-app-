@@ -8,6 +8,7 @@ This repository is a clean Supabase + Next.js + Vercel deployment package recons
 - Task creation with mandatory ETA, priority, assignee and status
 - Statuses: pending, followup, delayed, submitted, closed, not required
 - Dashboard and employee MIS
+- Recurring Checklist templates, generated items, employee completion, and Vercel Cron generation
 - Supabase SQL schema with Row Level Security
 
 ## 1. Create the new GitHub repository
@@ -29,7 +30,8 @@ Do not upload `.env.local`.
 2. Save the database password securely.
 3. Open **SQL Editor → New query**.
 4. Copy the complete contents of `supabase/migrations/001_initial_schema.sql`, paste, and run it once.
-5. Open **Project Settings / Connect / API Keys** and copy:
+5. Copy `supabase/migrations/002_product_features.sql` and `supabase/migrations/003_checklist.sql` into separate SQL Editor queries and run them in order.
+6. Open **Project Settings / Connect / API Keys** and copy:
    - Project URL
    - Publishable key (`sb_publishable_...`)
 
@@ -66,8 +68,10 @@ Open `http://localhost:3000` and test login, employee creation and task creation
 4. Add environment variables for Production, Preview and Development:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - `NEXT_PUBLIC_CHECKLIST_TIMEZONE` (keep this equal to `CHECKLIST_TIMEZONE`)
 5. Click Deploy.
-6. After deployment, open the Vercel URL and test login.
+6. Add `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, and `CHECKLIST_TIMEZONE` to Vercel. `CRON_SECRET` must be a long random value; Vercel Cron sends it to `/api/checklist/generate` automatically.
+7. After deployment, open the Vercel URL and test login and Checklist generation.
 
 ## 6. Custom domain
 In Vercel Project → Settings → Domains, add the required domain. At the DNS provider, add exactly the record Vercel displays. Do not delete the old production DNS until the new deployment is tested.
