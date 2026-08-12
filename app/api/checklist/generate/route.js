@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient, createSupabaseUserClient, getBearerToken } from '../../../../lib/supabase-server';
+import { getChecklistBusinessDate, isChecklistDueOnDate, localDateTimeToIso } from '../../../../lib/checklist-time';
 
 const managerRoles = new Set(['super_admin', 'assigner', 'ea']);
 const timeZone = process.env.CHECKLIST_TIMEZONE || 'Asia/Kolkata';
@@ -8,31 +9,7 @@ function responseError(message, status) {
 }
 
 function businessDate(value = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(value);
-  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function dateParts(dateValue) {
-  const [year, month, day] = dateValue.split('-').map(Number);
-  return { year, month, day };
-}
-
-function isTemplateDueOnDate(template, dateValue) {
-  const { year, month, day } = dateParts(dateValue);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (template.frequency === 'daily') return true;
-  if (template.frequency === 'weekly') return date.getUTCDay() === template.weekday;
-  if (template.frequency === 'monthly') {
-    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    return day === Math.min(Number(template.day_of_month), lastDay);
-  }
-  if (!template.start_date || dateValue < template.start_date) return false;
-  const start = dateParts(template.start_date);
-  const startDate = Date.UTC(start.year, start.month - 1, start.day);
-  return Math.round((date.getTime() - startDate) / 86400000) % 15 === 0;
+  return getChecklistBusinessDate(value, timeZone);
 }
 
 async function authorize(request) {
@@ -59,16 +36,17 @@ async function generate() {
   const today = businessDate();
   const { data: templates, error: templateError } = await admin
     .from('checklist_templates')
-    .select('id,employee_id,task,frequency,weekday,day_of_month,start_date')
+    .select('id,employee_id,task,frequency,weekday,day_of_month,start_date,due_time')
     .eq('active', true);
   if (templateError) throw templateError;
 
-  const dueTemplates = (templates || []).filter((template) => isTemplateDueOnDate(template, today));
+  const dueTemplates = (templates || []).filter((template) => isChecklistDueOnDate(template, today));
   const rows = dueTemplates.map((template) => ({
     template_id: template.id,
     employee_id: template.employee_id,
     task: template.task,
     due_date: today,
+    due_at: localDateTimeToIso(today, template.due_time, timeZone),
     status: 'pending',
   }));
 
@@ -86,7 +64,7 @@ async function generate() {
     .from('checklist_items')
     .update({ status: 'overdue' })
     .eq('status', 'pending')
-    .lt('due_date', today)
+    .lt('due_at', new Date().toISOString())
     .select('id');
   if (overdueError) throw overdueError;
 

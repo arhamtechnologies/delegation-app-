@@ -6,20 +6,44 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, Modal, PriorityBadge, SectionHeader, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { createTask, formatTaskDeadline, getTaskAssignees, getTaskStatus, getTasks } from '../../lib/task-data';
+import { formatChecklistDueAt, getBusinessDate, getChecklistItems, getChecklistStatus } from '../../lib/checklist-data';
+import { createTask, formatTaskDeadline, getTaskEmployees, getTaskStatus, getTasks } from '../../lib/task-data';
 
 const emptyForm = { title: '', description: '', assignee_id: '', eta: '', due_time: '', start_date: '', priority: 'normal', category: 'General', instructions: '', proof_required: true, completion_notes: null, attachments: [] };
 
 function getLocalDateInputValue() {
   const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 }
 
 function TaskSummarySkeleton() {
   return <div className="inline-stat inline-stat-loading" aria-hidden="true"><span className="inline-stat-icon skeleton-shimmer" /><div><span className="summary-value-placeholder skeleton-shimmer" /><span className="summary-label-placeholder skeleton-shimmer" /></div></div>;
+}
+
+function checklistWorkItem(item) {
+  return {
+    ...item,
+    kind: 'checklist',
+    title: item.task,
+    description: 'Recurring checklist item',
+    priority: 'normal',
+    category: 'Checklist',
+    assignee_id: item.employee_id,
+    assignee: item.employee,
+    checklistItem: item,
+  };
+}
+
+function getWorkStatus(workItem) {
+  return workItem.kind === 'checklist' ? getChecklistStatus(workItem.checklistItem) : getTaskStatus(workItem);
+}
+
+function getWorkDeadline(workItem) {
+  return workItem.kind === 'checklist' ? formatChecklistDueAt(workItem.due_at) : formatTaskDeadline(workItem);
+}
+
+function getWorkLink(workItem) {
+  return workItem.kind === 'checklist' ? `/tasks/checklist/${workItem.id}` : `/tasks/${workItem.id}`;
 }
 
 export default function Tasks() {
@@ -27,6 +51,7 @@ export default function Tasks() {
   const [form, setForm] = useState(emptyForm);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [employeeFilter, setEmployeeFilter] = useState('all');
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -43,12 +68,7 @@ export default function Tasks() {
     setLoading(true);
     setError('');
     const { user, employee, error: employeeError } = await getCurrentEmployee();
-
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
+    if (!user) { setLoading(false); return; }
     if (employeeError || !employee) {
       setError('Unable to load your workspace profile. Please try again.');
       setLoading(false);
@@ -56,22 +76,23 @@ export default function Tasks() {
     }
 
     const employeeRequest = canCreateTasks(employee.role)
-      ? getTaskAssignees()
-      : Promise.resolve({ data: [], error: null });
-    const [taskResponse, employeeResponse] = await Promise.all([
+      ? getTaskEmployees()
+      : Promise.resolve({ data: [employee], error: null });
+    const [taskResponse, checklistResponse, employeeResponse] = await Promise.all([
       getTasks({ limit: 200 }),
+      getChecklistItems({ dueDate: getBusinessDate() }),
       employeeRequest,
     ]);
-
-    if (taskResponse.error || employeeResponse.error) {
-      setError(taskResponse.error?.message || employeeResponse.error?.message || 'Unable to load tasks. Please try again.');
+    const responseError = taskResponse.error || checklistResponse.error || employeeResponse.error;
+    if (responseError) {
+      setError(responseError.message || 'Unable to load tasks. Please try again.');
       setLoading(false);
       return;
     }
-
     setTaskData({
       role: employee.role,
       tasks: taskResponse.data || [],
+      checklistItems: checklistResponse.data || [],
       employees: employeeResponse.data || [],
     });
     setLoading(false);
@@ -83,17 +104,21 @@ export default function Tasks() {
     if (taskData && !loading && canCreateTasks(taskData.role) && new URLSearchParams(window.location.search).get('create') === '1') openCreateModal();
   }, [loading, taskData]);
 
-  const tasks = useMemo(() => taskData?.tasks || [], [taskData]);
+  const workItems = useMemo(() => [
+    ...(taskData?.tasks || []).map((task) => ({ ...task, kind: 'task' })),
+    ...(taskData?.checklistItems || []).map(checklistWorkItem),
+  ].sort((left, right) => new Date(right.eta || right.due_at || 0).getTime() - new Date(left.eta || left.due_at || 0).getTime()), [taskData]);
   const employees = useMemo(() => taskData?.employees || [], [taskData]);
   const canCreate = Boolean(taskData && canCreateTasks(taskData.role));
 
-  const filteredTasks = useMemo(() => tasks.filter((task) => {
+  const filteredTasks = useMemo(() => workItems.filter((workItem) => {
     const query = search.trim().toLowerCase();
-    const matchesSearch = !query || [task.title, task.description, task.assignee?.name, task.category].filter(Boolean).join(' ').toLowerCase().includes(query);
-    const matchesStatus = status === 'all' || getTaskStatus(task) === status;
-    const matchesPriority = priority === 'all' || task.priority === priority;
-    return matchesSearch && matchesStatus && matchesPriority;
-  }), [tasks, search, status, priority]);
+    const searchable = [workItem.title, workItem.description, workItem.assignee?.name, workItem.category, workItem.checklistItem?.template?.frequency].filter(Boolean).join(' ').toLowerCase();
+    const matchesSearch = !query || searchable.includes(query);
+    const matchesEmployee = employeeFilter === 'all' || workItem.assignee_id === employeeFilter;
+    const workStatus = getWorkStatus(workItem);
+    return matchesSearch && matchesEmployee && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
+  }), [workItems, search, employeeFilter, status, priority]);
 
   function updateForm(field, value) { setForm((current) => ({ ...current, [field]: value })); }
 
@@ -112,24 +137,32 @@ export default function Tasks() {
     setSaving(false);
   }
 
+  function clearFilters() {
+    setSearch('');
+    setEmployeeFilter('all');
+    setStatus('all');
+    setPriority('all');
+  }
+
   return <AppShell title={taskData ? 'Tasks' : 'Loading tasks'} eyebrow="Workspace / Tasks" description="Create, prioritize, and keep every assignment moving." actions={canCreate ? <button className="button button-primary" type="button" onClick={openCreateModal}><Icon name="plus" size={17} />Create task</button> : null}>
-    {!taskData ? <section className="task-summary-row"><TaskSummarySkeleton /><TaskSummarySkeleton /><TaskSummarySkeleton /><TaskSummarySkeleton /></section> : <section className="task-summary-row"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="clipboard" size={16} /></span><div><strong>{tasks.length}</strong><span>Total tasks</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{tasks.filter((task) => getTaskStatus(task) === 'overdue').length}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="clock" size={16} /></span><div><strong>{tasks.filter((task) => getTaskStatus(task) === 'pending').length}</strong><span>Pending</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{tasks.filter((task) => getTaskStatus(task) === 'completed').length}</strong><span>Completed</span></div></div></section>}
+    {!taskData ? <section className="task-summary-row"><TaskSummarySkeleton /><TaskSummarySkeleton /><TaskSummarySkeleton /><TaskSummarySkeleton /></section> : <section className="task-summary-row"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="clipboard" size={16} /></span><div><strong>{workItems.length}</strong><span>Total tasks</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkStatus(workItem) === 'overdue').length}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="clock" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkStatus(workItem) === 'pending').length}</strong><span>Pending</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkStatus(workItem) === 'completed').length}</strong><span>Completed</span></div></div></section>}
     {message && <div className="inline-alert success"><Icon name="checkCircle" size={16} />{message}</div>}
     {error && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
     <section className="panel task-panel">
       <SectionHeader eyebrow="Task inbox" title={taskData ? 'All work' : 'Loading tasks'} description="Search and filter tasks by urgency, owner, or workflow stage." />
       <div className="filter-bar">
         <label className="search-box"><Icon name="search" size={17} /><input aria-label="Search tasks" placeholder="Search tasks, people, or categories" value={search} onChange={(event) => setSearch(event.target.value)} disabled={!taskData} /></label>
+        <label className="filter-control"><span>Employee</span><select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} disabled={!taskData}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label>
         <label className="filter-control"><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)} disabled={!taskData}><option value="all">All statuses</option><option value="pending">Pending</option><option value="overdue">Overdue</option><option value="completed">Completed</option></select></label>
         <label className="filter-control"><span>Priority</span><select value={priority} onChange={(event) => setPriority(event.target.value)} disabled={!taskData}><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option></select></label>
-        <button className="button button-ghost button-small filter-button" type="button" onClick={() => { setSearch(''); setStatus('all'); setPriority('all'); }} disabled={!taskData}><Icon name="filter" size={15} />Clear</button>
+        <button className="button button-ghost button-small filter-button" type="button" onClick={clearFilters} disabled={!taskData}><Icon name="filter" size={15} />Clear</button>
       </div>
       {!taskData ? (error ? <div className="data-error-state"><Icon name="warning" size={20} /><strong>Tasks could not be loaded.</strong><span>Check your connection and try again.</span><button className="button button-primary button-small" type="button" onClick={load}>Try again</button></div> : <div className="loading-list task-loading-list" aria-label="Loading tasks"><span /><span /><span /></div>) : filteredTasks.length ? <>
         <div className="task-table-heading"><span>Task</span><span>Owner</span><span>Priority</span><span>Status</span><span>Due</span><span /></div>
-        <div className="task-list task-list-desktop">{filteredTasks.map((task) => <div className="task-row task-row-grid" key={task.id}><div className="task-row-main"><span className="task-check"><Icon name={getTaskStatus(task) === 'completed' ? 'checkCircle' : 'clipboard'} size={18} /></span><div className="task-copy"><Link href={`/tasks/${task.id}`} className="task-title">{task.title}</Link><div className="task-subline"><span>{task.category || 'General'}</span><span className="dot-separator" />{task.description || 'No description added'}</div></div></div><div className="task-owner"><span className="avatar avatar-xs">{(task.assignee?.name || 'U').slice(0, 1).toUpperCase()}</span>{task.assignee?.name || 'Unassigned'}</div><PriorityBadge priority={task.priority} /><StatusBadge status={getTaskStatus(task)} compact /><span className={getTaskStatus(task) === 'overdue' ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{formatTaskDeadline(task)}</span><Link className="row-action" href={`/tasks/${task.id}`} aria-label={`Open ${task.title}`}><Icon name="chevronRight" size={17} /></Link></div>)}</div>
-        <div className="task-list task-list-mobile">{filteredTasks.map((task) => <div className="mobile-task-card" key={task.id}><div className="mobile-task-card-top"><Link href={`/tasks/${task.id}`} className="task-title">{task.title}</Link><StatusBadge status={getTaskStatus(task)} compact /></div><div className="mobile-task-card-meta"><span>{task.assignee?.name || 'Unassigned'}</span><PriorityBadge priority={task.priority} /><span className={getTaskStatus(task) === 'overdue' ? 'overdue' : ''}><Icon name="calendar" size={13} />{formatTaskDeadline(task)}</span></div><p>{task.description || 'No description added'}</p><div className="mobile-task-card-footer"><span>{task.category || 'General'}</span></div></div>)}</div>
-      </> : <EmptyState icon="clipboard" title="No tasks match these filters" description="Try a different search or clear the filters to see more work." action={canCreate ? 'Create a task' : null} />}
+        <div className="task-list task-list-desktop">{filteredTasks.map((workItem) => { const workStatus = getWorkStatus(workItem); const href = getWorkLink(workItem); return <div className="task-row task-row-grid" key={`${workItem.kind}-${workItem.id}`}><div className="task-row-main"><span className="task-check"><Icon name={workStatus === 'completed' ? 'checkCircle' : workItem.kind === 'checklist' ? 'checkSquare' : 'clipboard'} size={18} /></span><div className="task-copy"><Link href={href} className="task-title">{workItem.title}</Link><div className="task-subline"><span className={workItem.kind === 'checklist' ? 'task-source-badge' : ''}>{workItem.kind === 'checklist' && <Icon name="checkSquare" size={11} />} {workItem.kind === 'checklist' ? 'Checklist' : workItem.category || 'General'}</span><span className="dot-separator" /><span>{workItem.description || 'No description added'}</span></div></div></div><div className="task-owner"><span className="avatar avatar-xs">{(workItem.assignee?.name || 'U').slice(0, 1).toUpperCase()}</span>{workItem.assignee?.name || 'Unassigned'}</div><PriorityBadge priority={workItem.priority} /><StatusBadge status={workStatus} compact /><span className={workStatus === 'overdue' ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{getWorkDeadline(workItem)}</span><Link className="row-action" href={href} aria-label={`Open ${workItem.title}`}><Icon name="chevronRight" size={17} /></Link></div>; })}</div>
+        <div className="task-list task-list-mobile">{filteredTasks.map((workItem) => { const workStatus = getWorkStatus(workItem); const href = getWorkLink(workItem); return <div className="mobile-task-card" key={`${workItem.kind}-${workItem.id}`}><div className="mobile-task-card-top"><Link href={href} className="task-title">{workItem.title}</Link><StatusBadge status={workStatus} compact /></div><div className="mobile-task-card-meta"><span>{workItem.assignee?.name || 'Unassigned'}</span><PriorityBadge priority={workItem.priority} /><span className={workStatus === 'overdue' ? 'overdue' : ''}><Icon name="calendar" size={13} />{getWorkDeadline(workItem)}</span></div><p>{workItem.description || 'No description added'}</p><div className="mobile-task-card-footer"><span>{workItem.kind === 'checklist' ? 'Checklist' : workItem.category || 'General'}</span></div></div>; })}</div>
+      </> : <EmptyState icon="clipboard" title="No tasks match these filters" description="Try a different search or clear the filters to see more work." action={canCreate ? 'Create a task' : null} onAction={canCreate ? openCreateModal : undefined} />}
     </section>
-    {canCreate && <Modal open={modalOpen} title="Create a task" description="Give one person a clear next step with enough context to finish well." onClose={() => setModalOpen(false)} wide><form className="modal-form" onSubmit={submit}><div className="form-grid form-grid-two"><div className="field field-wide"><label htmlFor="task-title">Task title<span>*</span></label><input id="task-title" className="input" required placeholder="e.g. Prepare weekly sales summary" value={form.title} onChange={(event) => updateForm('title', event.target.value)} /></div><div className="field"><label htmlFor="task-assignee">Assign to<span>*</span></label><select id="task-assignee" className="input" required value={form.assignee_id} onChange={(event) => updateForm('assignee_id', event.target.value)}><option value="">Choose a person</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div><div className="field"><label htmlFor="task-priority">Priority</label><select id="task-priority" className="input" value={form.priority} onChange={(event) => updateForm('priority', event.target.value)}><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></div><div className="field"><label htmlFor="task-due">Due date<span>*</span></label><input id="task-due" className="input" type="date" required value={form.eta} onChange={(event) => updateForm('eta', event.target.value)} /></div><div className="field"><label htmlFor="task-due-time">Due time<span>*</span></label><input id="task-due-time" className="input" type="time" required value={form.due_time} onChange={(event) => updateForm('due_time', event.target.value)} /></div><div className="field"><label htmlFor="task-start">Start date</label><input id="task-start" className="input" type="date" value={form.start_date} onChange={(event) => updateForm('start_date', event.target.value)} /></div><div className="field field-wide"><label htmlFor="task-description">Description</label><textarea id="task-description" className="input" rows="4" placeholder="What does done look like?" value={form.description} onChange={(event) => updateForm('description', event.target.value)} /></div><div className="field field-wide"><label htmlFor="task-instructions">Instructions or handoff notes</label><textarea id="task-instructions" className="input" rows="3" placeholder="Add links, context, or specific expectations." value={form.instructions} onChange={(event) => updateForm('instructions', event.target.value)} /></div><label className="checkbox-field field-wide"><input type="checkbox" checked={form.proof_required} onChange={(event) => updateForm('proof_required', event.target.checked)} /><span><strong>Ask for completion proof</strong><small>Keep the handoff auditable when the task is submitted.</small></span></label></div>{error && <div className="form-error"><Icon name="warning" size={16} />{error}</div>}<div className="modal-actions"><button className="button button-ghost" type="button" onClick={() => setModalOpen(false)}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create task'}{!saving && <Icon name="arrowUpRight" size={16} />}</button></div></form></Modal>}
+    {canCreate && <Modal open={modalOpen} title="Create a task" description="Give one person a clear next step with enough context to finish well." onClose={() => setModalOpen(false)} wide><form className="modal-form" onSubmit={submit}><div className="form-grid form-grid-two"><div className="field field-wide"><label htmlFor="task-title">Task title<span>*</span></label><input id="task-title" className="input" required placeholder="e.g. Prepare weekly sales summary" value={form.title} onChange={(event) => updateForm('title', event.target.value)} /></div><div className="field"><label htmlFor="task-assignee">Assign to<span>*</span></label><select id="task-assignee" className="input" required value={form.assignee_id} onChange={(event) => updateForm('assignee_id', event.target.value)}><option value="">Choose a person</option>{(taskData?.role && employees.filter((employee) => employee.role !== 'super_admin' && employee.role !== 'assigner' && employee.role !== 'ea')).map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div><div className="field"><label htmlFor="task-priority">Priority</label><select id="task-priority" className="input" value={form.priority} onChange={(event) => updateForm('priority', event.target.value)}><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></div><div className="field"><label htmlFor="task-due">Due date<span>*</span></label><input id="task-due" className="input" type="date" required value={form.eta} onChange={(event) => updateForm('eta', event.target.value)} /></div><div className="field"><label htmlFor="task-due-time">Due time<span>*</span></label><input id="task-due-time" className="input" type="time" required value={form.due_time} onChange={(event) => updateForm('due_time', event.target.value)} /></div><div className="field"><label htmlFor="task-start">Start date</label><input id="task-start" className="input" type="date" value={form.start_date} onChange={(event) => updateForm('start_date', event.target.value)} /></div><div className="field field-wide"><label htmlFor="task-description">Description</label><textarea id="task-description" className="input" rows="4" placeholder="What does done look like?" value={form.description} onChange={(event) => updateForm('description', event.target.value)} /></div><div className="field field-wide"><label htmlFor="task-instructions">Instructions or handoff notes</label><textarea id="task-instructions" className="input" rows="3" placeholder="Add links, context, or specific expectations." value={form.instructions} onChange={(event) => updateForm('instructions', event.target.value)} /></div><label className="checkbox-field field-wide"><input type="checkbox" checked={form.proof_required} onChange={(event) => updateForm('proof_required', event.target.checked)} /><span><strong>Ask for completion proof</strong><small>Keep the handoff auditable when the task is submitted.</small></span></label></div>{error && <div className="form-error"><Icon name="warning" size={16} />{error}</div>}<div className="modal-actions"><button className="button button-ghost" type="button" onClick={() => setModalOpen(false)}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create task'}{!saving && <Icon name="arrowUpRight" size={16} />}</button></div></form></Modal>}
   </AppShell>;
 }
