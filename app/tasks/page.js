@@ -6,7 +6,7 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, Modal, PriorityBadge, SectionHeader, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { formatChecklistDueAt, getBusinessDate, getChecklistItems, getChecklistStatus } from '../../lib/checklist-data';
+import { formatChecklistDueAt, getChecklistItems, getChecklistStatus, setChecklistCompletion } from '../../lib/checklist-data';
 import { createTask, formatTaskDeadline, getTaskEmployees, getTaskStatus, getTasks } from '../../lib/task-data';
 
 const emptyForm = { title: '', description: '', assignee_id: '', eta: '', due_time: '', start_date: '', priority: 'normal', category: 'General', instructions: '', proof_required: true, completion_notes: null, attachments: [] };
@@ -56,6 +56,7 @@ export default function Tasks() {
   const [priority, setPriority] = useState('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [completing, setCompleting] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -80,10 +81,10 @@ export default function Tasks() {
       : Promise.resolve({ data: [employee], error: null });
     const [taskResponse, checklistResponse, employeeResponse] = await Promise.all([
       getTasks({ limit: 200 }),
-      getChecklistItems({ dueDate: getBusinessDate() }),
+      getChecklistItems({ limit: 500 }),
       employeeRequest,
     ]);
-    const responseError = taskResponse.error || checklistResponse.error || employeeResponse.error;
+    const responseError = taskResponse.error || employeeResponse.error;
     if (responseError) {
       setError(responseError.message || 'Unable to load tasks. Please try again.');
       setLoading(false);
@@ -91,10 +92,12 @@ export default function Tasks() {
     }
     setTaskData({
       role: employee.role,
+      employeeId: employee.id,
       tasks: taskResponse.data || [],
       checklistItems: checklistResponse.data || [],
       employees: employeeResponse.data || [],
     });
+    if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
     setLoading(false);
   }
 
@@ -137,6 +140,16 @@ export default function Tasks() {
     setSaving(false);
   }
 
+  async function completeChecklist(workItem) {
+    if (completing || getWorkStatus(workItem) === 'completed') return;
+    setCompleting(workItem.id);
+    setError('');
+    const { error: updateError } = await setChecklistCompletion(workItem.id);
+    if (updateError) setError(updateError.message);
+    else { setMessage('Checklist item completed.'); await load(); }
+    setCompleting(null);
+  }
+
   function clearFilters() {
     setSearch('');
     setEmployeeFilter('all');
@@ -159,7 +172,7 @@ export default function Tasks() {
       </div>
       {!taskData ? (error ? <div className="data-error-state"><Icon name="warning" size={20} /><strong>Tasks could not be loaded.</strong><span>Check your connection and try again.</span><button className="button button-primary button-small" type="button" onClick={load}>Try again</button></div> : <div className="loading-list task-loading-list" aria-label="Loading tasks"><span /><span /><span /></div>) : filteredTasks.length ? <>
         <div className="task-table-heading"><span>Task</span><span>Owner</span><span>Priority</span><span>Status</span><span>Due</span><span /></div>
-        <div className="task-list task-list-desktop">{filteredTasks.map((workItem) => { const workStatus = getWorkStatus(workItem); const href = getWorkLink(workItem); return <div className="task-row task-row-grid" key={`${workItem.kind}-${workItem.id}`}><div className="task-row-main"><span className="task-check"><Icon name={workStatus === 'completed' ? 'checkCircle' : workItem.kind === 'checklist' ? 'checkSquare' : 'clipboard'} size={18} /></span><div className="task-copy"><Link href={href} className="task-title">{workItem.title}</Link><div className="task-subline"><span className={workItem.kind === 'checklist' ? 'task-source-badge' : ''}>{workItem.kind === 'checklist' && <Icon name="checkSquare" size={11} />} {workItem.kind === 'checklist' ? 'Checklist' : workItem.category || 'General'}</span><span className="dot-separator" /><span>{workItem.description || 'No description added'}</span></div></div></div><div className="task-owner"><span className="avatar avatar-xs">{(workItem.assignee?.name || 'U').slice(0, 1).toUpperCase()}</span>{workItem.assignee?.name || 'Unassigned'}</div><PriorityBadge priority={workItem.priority} /><StatusBadge status={workStatus} compact /><span className={workStatus === 'overdue' ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{getWorkDeadline(workItem)}</span><Link className="row-action" href={href} aria-label={`Open ${workItem.title}`}><Icon name="chevronRight" size={17} /></Link></div>; })}</div>
+        <div className="task-list task-list-desktop">{filteredTasks.map((workItem) => { const workStatus = getWorkStatus(workItem); const href = getWorkLink(workItem); const canComplete = workItem.kind === 'checklist' && workItem.employee_id === taskData.employeeId && workStatus !== 'completed'; return <div className="task-row task-row-grid" key={`${workItem.kind}-${workItem.id}`}><div className="task-row-main">{canComplete ? <button className="task-check task-check-button" type="button" onClick={() => completeChecklist(workItem)} disabled={completing === workItem.id} aria-label={`Complete ${workItem.title}`}><Icon name="checkSquare" size={18} /></button> : <span className="task-check"><Icon name={workStatus === 'completed' ? 'checkCircle' : workItem.kind === 'checklist' ? 'checkSquare' : 'clipboard'} size={18} /></span>}<div className="task-copy"><Link href={href} className="task-title">{workItem.title}</Link><div className="task-subline"><span className={workItem.kind === 'checklist' ? 'task-source-badge' : ''}>{workItem.kind === 'checklist' && <Icon name="checkSquare" size={11} />} {workItem.kind === 'checklist' ? 'Checklist' : workItem.category || 'General'}</span><span className="dot-separator" /><span>{workItem.description || 'No description added'}</span></div></div></div><div className="task-owner"><span className="avatar avatar-xs">{(workItem.assignee?.name || 'U').slice(0, 1).toUpperCase()}</span>{workItem.assignee?.name || 'Unassigned'}</div><PriorityBadge priority={workItem.priority} /><StatusBadge status={workStatus} compact /><span className={workStatus === 'overdue' ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{getWorkDeadline(workItem)}</span><Link className="row-action" href={href} aria-label={`Open ${workItem.title}`}><Icon name="chevronRight" size={17} /></Link></div>; })}</div>
         <div className="task-list task-list-mobile">{filteredTasks.map((workItem) => { const workStatus = getWorkStatus(workItem); const href = getWorkLink(workItem); return <div className="mobile-task-card" key={`${workItem.kind}-${workItem.id}`}><div className="mobile-task-card-top"><Link href={href} className="task-title">{workItem.title}</Link><StatusBadge status={workStatus} compact /></div><div className="mobile-task-card-meta"><span>{workItem.assignee?.name || 'Unassigned'}</span><PriorityBadge priority={workItem.priority} /><span className={workStatus === 'overdue' ? 'overdue' : ''}><Icon name="calendar" size={13} />{getWorkDeadline(workItem)}</span></div><p>{workItem.description || 'No description added'}</p><div className="mobile-task-card-footer"><span>{workItem.kind === 'checklist' ? 'Checklist' : workItem.category || 'General'}</span></div></div>; })}</div>
       </> : <EmptyState icon="clipboard" title="No tasks match these filters" description="Try a different search or clear the filters to see more work." action={canCreate ? 'Create a task' : null} onAction={canCreate ? openCreateModal : undefined} />}
     </section>

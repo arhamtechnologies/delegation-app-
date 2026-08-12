@@ -6,6 +6,7 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, MetricCard, PriorityBadge, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
+import { formatChecklistDueAt, getBusinessDate, getChecklistItems, getChecklistStatus } from '../../lib/checklist-data';
 import { formatTaskDeadline, getDashboardData, getTaskStatus } from '../../lib/task-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
@@ -18,6 +19,7 @@ function IntroSkeleton() {
 }
 
 function getTaskDueDisplay(task) {
+  if (task.kind === 'checklist') return { label: formatChecklistDueAt(task.due_at), overdue: getChecklistStatus(task) === 'overdue' };
   return {
     label: formatTaskDeadline(task, { relative: true }),
     overdue: getTaskStatus(task) === 'overdue',
@@ -26,15 +28,17 @@ function getTaskDueDisplay(task) {
 
 function DashboardTaskRow({ task }) {
   const due = getTaskDueDisplay(task);
+  const status = task.kind === 'checklist' ? getChecklistStatus(task) : getTaskStatus(task);
+  const href = task.kind === 'checklist' ? `/tasks/checklist/${task.id}` : `/tasks/${task.id}`;
   return <li className="dashboard-task-row">
     <div className="dashboard-task-primary">
-      <Link href={`/tasks/${task.id}`} className="dashboard-task-title">{task.title}</Link>
-      {task.category && <span className="dashboard-task-category">{task.category}</span>}
+      <Link href={href} className="dashboard-task-title">{task.title}</Link>
+      <span className={task.kind === 'checklist' ? 'dashboard-task-category task-source-badge' : 'dashboard-task-category'}>{task.kind === 'checklist' ? 'Checklist' : task.category}</span>
     </div>
     <div className="dashboard-task-meta">
       <div className="dashboard-task-assignee"><span>Assigned to</span><strong>{task.assignee?.name || 'Unassigned'}</strong></div>
       <PriorityBadge priority={task.priority} />
-      <StatusBadge status={getTaskStatus(task)} compact />
+      <StatusBadge status={status} compact />
       <span className={`dashboard-task-due${due.overdue ? ' overdue' : ''}`}>{due.label}</span>
     </div>
   </li>;
@@ -62,11 +66,12 @@ export default function Dashboard() {
     }
 
     const manager = ['super_admin', 'assigner', 'ea'].includes(employee.role);
-    const [dashboardResponse, employeeResponse] = await Promise.all([
+    const [dashboardResponse, employeeResponse, checklistResponse] = await Promise.all([
       getDashboardData(manager),
       manager
         ? supabaseBrowser().from('employees').select('id', { count: 'exact', head: true }).eq('active', true)
         : Promise.resolve({ count: null, error: null }),
+      getChecklistItems({ limit: 500 }),
     ]);
 
     if (dashboardResponse.error || employeeResponse.error) {
@@ -75,11 +80,34 @@ export default function Dashboard() {
       return;
     }
 
+    const checklistItems = checklistResponse.data || [];
+    if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
+    const checklistWorkItems = checklistItems.map((item) => ({ ...item, kind: 'checklist', title: item.task, priority: 'normal', category: 'Checklist', assignee: item.employee }));
+    const checklistStatuses = checklistItems.map((item) => getChecklistStatus(item));
+    const checklistMetrics = {
+      total: checklistItems.length,
+      overdue: checklistStatuses.filter((status) => status === 'overdue').length,
+      pending: checklistStatuses.filter((status) => status === 'pending').length,
+      completed: checklistStatuses.filter((status) => status === 'completed').length,
+      dueToday: checklistItems.filter((item) => item.due_date === getBusinessDate()).length,
+      dueSoon: checklistItems.filter((item) => {
+        const dueAt = new Date(item.due_at).getTime();
+        return getChecklistStatus(item) === 'pending' && Number.isFinite(dueAt) && dueAt <= Date.now() + 48 * 60 * 60 * 1000;
+      }).length,
+    };
+    const normalMetrics = dashboardResponse.data.metrics;
+    const metrics = manager
+      ? { ...normalMetrics, total: normalMetrics.total + checklistMetrics.total, overdue: normalMetrics.overdue + checklistMetrics.overdue, dueSoon: normalMetrics.dueSoon + checklistMetrics.dueSoon }
+      : { ...normalMetrics, open: normalMetrics.open + checklistMetrics.pending + checklistMetrics.overdue, dueToday: normalMetrics.dueToday + checklistMetrics.dueToday, overdue: normalMetrics.overdue + checklistMetrics.overdue, completed: normalMetrics.completed + checklistMetrics.completed };
+    const priorityTasks = [...dashboardResponse.data.priorityTasks, ...checklistWorkItems]
+      .sort((left, right) => new Date(left.eta || left.due_at || 0) - new Date(right.eta || right.due_at || 0))
+      .slice(0, 8);
+
     setDashboardData({
       name: employee.name,
       role: employee.role,
-      metrics: dashboardResponse.data.metrics,
-      priorityTasks: dashboardResponse.data.priorityTasks,
+      metrics,
+      priorityTasks,
       activeEmployees: manager ? employeeResponse.count || 0 : null,
     });
     setLoading(false);

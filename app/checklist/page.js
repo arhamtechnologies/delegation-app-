@@ -5,7 +5,7 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, Modal, SectionHeader, StatusBadge } from '../../components/UI';
 import { getCurrentEmployee } from '../../lib/auth';
-import { canManageChecklists, checklistFrequencies, checklistWeekdays, formatChecklistDays, formatChecklistDueAt, formatChecklistTime, formatEmployeeId, getBusinessDate, getChecklistStatus, setChecklistCompletion, triggerChecklistGeneration } from '../../lib/checklist-data';
+import { canManageChecklists, checklistFrequencies, checklistWeekdays, formatChecklistDays, formatChecklistDueAt, formatChecklistTime, formatEmployeeId, getBusinessDate, getChecklistSchemaError, getChecklistStatus, setChecklistCompletion, triggerChecklistGeneration } from '../../lib/checklist-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
 const emptyForm = { employee_id: '', task: '', frequency: 'daily', weekday: '1', start_date: '', due_time: '17:00', day_of_month: '1', active: true };
@@ -48,6 +48,7 @@ export default function Checklist() {
     }
 
     const manager = canManageChecklists(employee.role);
+    const generationResponse = manager ? await triggerChecklistGeneration() : null;
     const supabase = supabaseBrowser();
     const itemQuery = supabase.from('checklist_items').select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by,created_at,employee:employees!checklist_items_employee_id_fkey(id,name,email)').order('due_at', { ascending: false }).limit(500);
     const [itemResponse, templateResponse, employeeResponse] = await Promise.all([
@@ -55,13 +56,14 @@ export default function Checklist() {
       manager ? supabase.from('checklist_templates').select('id,employee_id,task,frequency,weekday,day_of_month,start_date,due_time,active,created_at,updated_at,employee:employees!checklist_templates_employee_id_fkey(id,name,email)').order('active', { ascending: false }).order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
       manager ? supabase.from('employees').select('id,name,email,active,role').order('name') : Promise.resolve({ data: [], error: null }),
     ]);
-    const responseError = itemResponse.error || templateResponse.error || employeeResponse.error;
+    const responseError = getChecklistSchemaError(itemResponse.error || templateResponse.error || employeeResponse.error);
     if (responseError) {
       setError(responseError.message || 'Unable to load checklist data. Please try again.');
       setLoading(false);
       return;
     }
     setData({ userId: user.id, employee, manager, items: itemResponse.data || [], templates: templateResponse.data || [], employees: employeeResponse.data || [] });
+    if (generationResponse && !generationResponse.success) setError(generationResponse.error || 'Checklist generation failed.');
     setLoading(false);
   }
 
@@ -115,7 +117,8 @@ export default function Checklist() {
     else {
       setMessage(editing ? 'Checklist updated.' : 'Checklist created and scheduled.');
       closeModal();
-      try { await triggerChecklistGeneration(); } catch { /* The hourly cron remains the source of truth. */ }
+      const generationResponse = await triggerChecklistGeneration();
+      if (!generationResponse?.success) setError(generationResponse?.error || 'Checklist saved, but its current item could not be generated.');
       await load();
     }
     setSaving(false);

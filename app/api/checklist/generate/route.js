@@ -5,7 +5,7 @@ const managerRoles = new Set(['super_admin', 'assigner', 'ea']);
 const timeZone = process.env.CHECKLIST_TIMEZONE || 'Asia/Kolkata';
 
 function responseError(message, status) {
-  return Response.json({ error: message }, { status });
+  return Response.json({ success: false, created: 0, skipped: 0, error: message }, { status });
 }
 
 function businessDate(value = new Date()) {
@@ -68,17 +68,27 @@ async function generate() {
     .select('id');
   if (overdueError) throw overdueError;
 
-  return { date: today, scanned: templates?.length || 0, due: rows.length, created, markedOverdue: overdueItems?.length || 0 };
+  return {
+    date: today,
+    scanned: templates?.length || 0,
+    due: rows.length,
+    created,
+    skipped: Math.max(rows.length - created, 0),
+    markedOverdue: overdueItems?.length || 0,
+  };
 }
 
 async function handler(request) {
   const authorization = await authorize(request);
   if (authorization.error) return authorization.error;
   try {
-    return Response.json({ ok: true, ...(await generate()) });
+    return Response.json({ success: true, ok: true, ...(await generate()) });
   } catch (error) {
     console.error('Checklist generation failed.', { code: error.code, message: error.message });
-    return responseError('Checklist generation failed.', 500);
+    if (/(due_at|due_time|checklist_items|checklist_templates)/i.test(error.message || '') && /(column|relation|schema cache|does not exist)/i.test(error.message || '')) {
+      return responseError('Checklist database migration 004_checklist_due_time.sql is not applied.', 500);
+    }
+    return responseError('Checklist generation failed. Check the server logs for the database error.', 500);
   }
 }
 
