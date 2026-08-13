@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '../../lib/supabase-browser';
@@ -10,7 +10,12 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
   const router = useRouter();
+
+  useEffect(() => {
+    if (window.location.search.includes('reset=success')) setResetMessage('Your password has been updated. Sign in with your new password.');
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -34,5 +39,5 @@ export default function Login() {
     router.refresh();
   }
 
-  return <main className="login-page login-simple"><section className="login-form-panel"><div className="login-form-wrap"><div className="login-brand"><span className="brand-mark">D</span><span>Delegation</span></div><div className="login-heading"><h1>Sign in to your workspace</h1><p>Use your company account to continue.</p></div><form onSubmit={submit} className="auth-form"><label htmlFor="email">Email</label><input id="email" className="input" type="email" autoComplete="email" placeholder="you@company.com" required value={email} onChange={(event) => setEmail(event.target.value)} /><label htmlFor="password">Password</label><input id="password" className="input" type="password" autoComplete="current-password" placeholder="Enter your password" required value={password} onChange={(event) => setPassword(event.target.value)} /><div className="login-form-link"><Link href="/forgot-password">Forgot password?</Link></div>{error && <div className="form-error" role="alert">{error}</div>}<button className="button button-primary button-full" type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button></form></div></section></main>;
+  return <main className="login-page login-simple"><section className="login-form-panel"><div className="login-form-wrap"><div className="login-brand"><span className="brand-mark">D</span><span>Delegation</span></div><div className="login-heading"><h1>Sign in to your workspace</h1><p>Use your company account to continue.</p></div>{resetMessage && <div className="inline-alert success" role="status">{resetMessage}</div>}<form onSubmit={submit} className="auth-form"><label htmlFor="email">Email</label><input id="email" className="input" type="email" autoComplete="email" placeholder="you@company.com" required value={email} onChange={(event) => setEmail(event.target.value)} /><label htmlFor="password">Password</label><input id="password" className="input" type="password" autoComplete="current-password" placeholder="Enter your password" required value={password} onChange={(event) => setPassword(event.target.value)} /><div className="login-form-link"><Link href="/forgot-password">Forgot password?</Link></div>{error && <div className="form-error" role="alert">{error}</div>}<button className="button button-primary button-full" type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button></form></div></section></main>;
 }

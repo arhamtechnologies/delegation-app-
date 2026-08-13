@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Icon } from '../../components/Icons';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
-const RESET_REDIRECT_URL = 'https://delegation.arham.app/update-password';
 const GENERIC_MESSAGE = 'If an account exists for this email address, a password reset link has been sent.';
 
 export default function ForgotPassword() {
@@ -26,7 +25,7 @@ export default function ForgotPassword() {
 
     setSending(true);
     try {
-      await supabaseBrowser().auth.resetPasswordForEmail(normalizedEmail, { redirectTo: RESET_REDIRECT_URL });
+      await supabaseBrowser().auth.resetPasswordForEmail(normalizedEmail, { redirectTo: `${window.location.origin}/update-password` });
       setMessage(GENERIC_MESSAGE);
     } catch {
       setMessage(GENERIC_MESSAGE);
