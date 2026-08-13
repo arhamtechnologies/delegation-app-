@@ -41,29 +41,24 @@ export async function POST(request) {
   if (!emailPattern.test(email)) return errorResponse('Enter a valid email address.', 400);
 
   let userClient;
+  let adminClient;
   try {
     userClient = createSupabaseUserClient(accessToken);
+    adminClient = createSupabaseAdminClient();
   } catch {
-    return errorResponse('Server authentication is not configured.', 500);
+    return errorResponse('Employee email synchronization is not configured on the server.', 503);
   }
 
   const { data: { user } = {}, error: userError } = await userClient.auth.getUser(accessToken);
   if (userError || !user) return errorResponse('Your session is invalid or has expired. Please sign in again.', 401);
 
-  const { data: requester, error: requesterError } = await userClient
+  const { data: requester, error: requesterError } = await adminClient
     .from('employees')
     .select('id,role')
     .eq('auth_user_id', user.id)
     .maybeSingle();
   if (requesterError) return errorResponse('Your employee permissions could not be verified.', 500);
   if (!requester || requester.role !== 'super_admin') return errorResponse('Only Super Admins can change employee login emails.', 403);
-
-  let adminClient;
-  try {
-    adminClient = createSupabaseAdminClient();
-  } catch {
-    return errorResponse('Employee email synchronization is not configured on the server.', 503);
-  }
 
   const { data: targetEmployee, error: targetError } = await adminClient
     .from('employees')
@@ -81,11 +76,14 @@ export async function POST(request) {
   if ((otherEmployees || []).some((employee) => employee.email?.trim().toLowerCase() === email)) return errorResponse('This email address is already assigned to another employee.', 409);
 
   if (!targetEmployee.auth_user_id) {
-    const { error: employeeUpdateError } = await adminClient
+    const { data: updatedEmployee, error: employeeUpdateError } = await adminClient
       .from('employees')
       .update({ email })
-      .eq('id', employeeId);
+      .eq('id', employeeId)
+      .select('id')
+      .maybeSingle();
     if (employeeUpdateError) return errorResponse('Unable to update the employee email. Please try again.', 500);
+    if (!updatedEmployee) return errorResponse('Employee email update did not affect the requested employee.', 404);
     return Response.json({ success: true, auth_synced: false, email });
   }
 
@@ -103,11 +101,22 @@ export async function POST(request) {
     return errorResponse('Unable to update the login email. Please try again.', 500);
   }
 
-  const { error: employeeUpdateError } = await adminClient
+  const { data: updatedEmployee, error: employeeUpdateError } = await adminClient
     .from('employees')
     .update({ email })
-    .eq('id', employeeId);
-  if (!employeeUpdateError) return Response.json({ success: true, auth_synced: true, email });
+    .eq('id', employeeId)
+    .select('id')
+    .maybeSingle();
+  if (!employeeUpdateError && updatedEmployee) {
+    return Response.json({ success: true, auth_synced: true, email });
+  }
+  if (!employeeUpdateError && !updatedEmployee) {
+    if (previousAuthEmail) {
+      const { error: rollbackError } = await adminClient.auth.admin.updateUserById(targetEmployee.auth_user_id, { email: previousAuthEmail });
+      if (rollbackError) return errorResponse('Email synchronization failed and the previous login email could not be restored. Contact an administrator.', 500);
+    }
+    return errorResponse('Employee email update did not affect the requested employee. The previous email was restored.', 500);
+  }
 
   if (previousAuthEmail) {
     const { error: rollbackError } = await adminClient.auth.admin.updateUserById(targetEmployee.auth_user_id, { email: previousAuthEmail });
