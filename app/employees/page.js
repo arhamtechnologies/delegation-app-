@@ -9,6 +9,7 @@ import { supabaseBrowser } from '../../lib/supabase-browser';
 
 const emptyEmployee = { name: '', email: '', mobile: '', role: 'doer', active: true, password: '' };
 const roleLabels = { super_admin: 'Super admin', assigner: 'Assigner', ea: 'Executive assistant', doer: 'Doer' };
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function hasLoginAccess(employee) {
   return employee?.auth_user_id !== null && employee?.auth_user_id !== undefined;
@@ -114,9 +115,41 @@ export default function Employees() {
     setSaving(true);
     setError('');
     let saveError = null;
+    let emailUpdated = false;
     if (editing) {
-      const { error: updateError } = await supabaseBrowser().from('employees').update({ name: form.name, email: form.email, mobile: form.mobile, role: form.role, active: form.active }).eq('id', editing.id);
-      saveError = updateError;
+      const normalizedEmail = form.email.trim().toLowerCase();
+      const emailChanged = form.email.trim() !== (editing.email || '').trim();
+      const linkedEmployee = hasLoginAccess(editing);
+      if (emailChanged && !emailPattern.test(normalizedEmail)) {
+        saveError = { message: 'Enter a valid email address.' };
+      } else if (emailChanged && linkedEmployee && currentRole !== 'super_admin') {
+        saveError = { message: 'Only Super Admins can change employee login emails.' };
+      } else {
+        if (emailChanged && currentRole === 'super_admin') {
+          try {
+            const { data: { session } = {} } = await supabaseBrowser().auth.getSession();
+            if (!session?.access_token) saveError = { message: 'Your session has expired. Please sign in again.' };
+            else {
+              const response = await fetch('/api/admin/employees/update-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                body: JSON.stringify({ employee_id: editing.id, email: normalizedEmail }),
+              });
+              const result = await response.json().catch(() => ({}));
+              if (!response.ok) saveError = { message: result.error || 'Unable to update the employee email. Please try again.' };
+              else emailUpdated = true;
+            }
+          } catch {
+            saveError = { message: 'The employee email service is unavailable. Please try again.' };
+          }
+        }
+        if (!saveError) {
+          const profileUpdate = { name: form.name, mobile: form.mobile, role: form.role, active: form.active };
+          if (!emailChanged || currentRole !== 'super_admin') profileUpdate.email = emailChanged ? normalizedEmail : form.email;
+          const { error: updateError } = await supabaseBrowser().from('employees').update(profileUpdate).eq('id', editing.id);
+          saveError = updateError ? { message: 'Unable to update employee details. Please try again.' } : null;
+        }
+      }
     } else {
       const { data: { session } = {} } = await supabaseBrowser().auth.getSession();
       if (!session?.access_token) saveError = { message: 'Your session has expired. Please sign in again.' };
@@ -135,7 +168,7 @@ export default function Employees() {
       }
     }
     if (saveError) setError(saveError.message);
-    else { setMessage(editing ? 'Employee details updated.' : 'Employee added with a login account.'); await load(); closeModal(); }
+    else { setMessage(emailUpdated ? 'Email updated successfully.' : editing ? 'Employee details updated.' : 'Employee added with a login account.'); await load(); closeModal(); }
     setSaving(false);
   }
 
