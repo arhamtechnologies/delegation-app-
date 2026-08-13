@@ -538,3 +538,8 @@ h1, h2, h3, p { margin-top: 0; }
   color: var(--ink-strong);
   font-size: 14px;
 }
+
+.login-note a, .login-form-link a { color: var(--purple-dark); font-weight: 700; }
+.login-form-link { margin-top: 3px; text-align: right; font-size: 10px; }
+.password-reset-confirmation { display: grid; gap: 5px; margin-bottom: 16px; padding: 11px 12px; border: 1px solid #e4e1ff; border-radius: 10px; background: #f7f5ff; color: var(--muted-strong); font-size: 10px; line-height: 1.45; }
+.password-reset-confirmation strong { color: var(--ink-strong); font-size: 11px; }
