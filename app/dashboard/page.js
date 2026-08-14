@@ -6,8 +6,9 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, MetricCard, PriorityBadge, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { formatChecklistDueAt, getChecklistItems, getChecklistStatus } from '../../lib/checklist-data';
-import { formatTaskDeadline, getTaskStatus, getTasks } from '../../lib/task-data';
+import { formatChecklistDueAt, getChecklistItems } from '../../lib/checklist-data';
+import { formatTaskDeadline, getTasks } from '../../lib/task-data';
+import { getWorkItemStatus, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
 
 function MetricSkeleton() {
   return <div className="metric-card metric-card-loading" aria-hidden="true"><div className="metric-card-top"><span className="metric-icon skeleton-shimmer" /></div><div className="metric-value"><span className="metric-value-placeholder skeleton-shimmer" /></div><div className="metric-label"><span className="metric-label-placeholder skeleton-shimmer" /></div></div>;
@@ -18,24 +19,16 @@ function IntroSkeleton() {
 }
 
 function getTaskDueDisplay(task) {
-  if (task.kind === 'checklist') return { label: formatChecklistDueAt(task.due_at), overdue: getChecklistStatus(task) === 'overdue' };
+  if (task.kind === 'checklist') return { label: formatChecklistDueAt(task.due_at), overdue: getWorkItemStatus(task) === 'overdue' };
   return {
     label: formatTaskDeadline(task, { relative: true }),
-    overdue: getTaskStatus(task) === 'overdue',
+    overdue: getWorkItemStatus(task) === 'overdue',
   };
-}
-
-function checklistWorkItem(item) {
-  return { ...item, kind: 'checklist', title: item.task, priority: 'normal', category: 'Checklist', assignee: item.employee };
-}
-
-function workItemStatus(workItem, now) {
-  return workItem.kind === 'checklist' ? getChecklistStatus(workItem, now) : getTaskStatus(workItem, now);
 }
 
 function getDashboardMetrics(workItems, now) {
   return workItems.reduce((metrics, workItem) => {
-    const status = workItemStatus(workItem, now);
+    const status = getWorkItemStatus(workItem, now);
     metrics[status] += 1;
     return metrics;
   }, { total: workItems.length, pending: 0, overdue: 0, completed: 0 });
@@ -45,7 +38,7 @@ function getPriorityWorkItems(workItems, now) {
   const soon = now.getTime() + 48 * 60 * 60 * 1000;
   return workItems
     .filter((workItem) => {
-      const status = workItemStatus(workItem, now);
+      const status = getWorkItemStatus(workItem, now);
       if (status === 'overdue') return true;
       const dueValue = workItem.eta || workItem.due_at;
       const dueTime = dueValue ? new Date(dueValue).getTime() : NaN;
@@ -57,7 +50,7 @@ function getPriorityWorkItems(workItems, now) {
 
 function DashboardTaskRow({ task }) {
   const due = getTaskDueDisplay(task);
-  const status = task.kind === 'checklist' ? getChecklistStatus(task) : getTaskStatus(task);
+  const status = getWorkItemStatus(task);
   const href = task.kind === 'checklist' ? `/tasks/checklist/${task.id}` : `/tasks/${task.id}`;
   return <li className="dashboard-task-row">
     <div className="dashboard-task-primary">
@@ -108,8 +101,8 @@ export default function Dashboard() {
     const checklistItems = checklistResponse.data || [];
     if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
     const workItems = [
-      ...(taskResponse.data || []).map((task) => ({ ...task, kind: 'task' })),
-      ...checklistItems.map(checklistWorkItem),
+      ...(taskResponse.data || []).map(toTaskWorkItem),
+      ...checklistItems.map(toChecklistWorkItem),
     ];
     const now = new Date();
 

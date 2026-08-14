@@ -97,9 +97,10 @@ h1, h2, h3, p { margin-top: 0; }
 .progress-blue { background: var(--blue); }.progress-purple { background: var(--purple); }.progress-mint { background: var(--mint); }.progress-orange { background: var(--orange); }
 
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
-.metric-card-link { display: block; min-width: 0; }
+.metric-card-link { display: block; min-width: 0; cursor: pointer; }
 .metric-card { min-width: 0; min-height: 137px; padding: 17px 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-soft); }
 .metric-card-link:hover .metric-card { transform: translateY(-2px); box-shadow: var(--shadow); }
+.metric-card-link:focus-visible { outline: 3px solid rgba(103,92,246,.28); outline-offset: 3px; border-radius: var(--radius); }
 .metric-card-top { display: flex; align-items: center; justify-content: space-between; }
 .metric-icon { display: inline-flex; align-items: center; justify-content: center; width: 35px; height: 35px; border-radius: 11px; }
 .metric-blue .metric-icon, .inline-stat-icon.blue { background: #e9f2ff; color: var(--blue); }.metric-orange .metric-icon, .inline-stat-icon.orange { background: #fff0e4; color: var(--orange); }.metric-purple .metric-icon, .inline-stat-icon.purple { background: #f0edff; color: var(--purple); }.metric-mint .metric-icon, .inline-stat-icon.mint { background: #e4f8f2; color: var(--mint); }.metric-green .metric-icon { background: #e4f8f2; color: var(--mint); }
