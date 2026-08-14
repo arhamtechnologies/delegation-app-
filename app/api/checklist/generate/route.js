@@ -36,7 +36,7 @@ async function generate() {
   const today = businessDate();
   const { data: templates, error: templateError } = await admin
     .from('checklist_templates')
-    .select('id,employee_id,task,frequency,weekday,day_of_month,start_date,due_time')
+    .select('id,employee_id,task,frequency,weekday,day_of_month,monthly_days,start_date,due_time')
     .eq('active', true);
   if (templateError) throw templateError;
 
@@ -85,8 +85,8 @@ async function handler(request) {
     return Response.json({ success: true, ok: true, ...(await generate()) });
   } catch (error) {
     console.error('Checklist generation failed.', { code: error.code, message: error.message });
-    if (/(due_at|due_time|checklist_items|checklist_templates)/i.test(error.message || '') && /(column|relation|schema cache|does not exist)/i.test(error.message || '')) {
-      return responseError('Checklist database migration 004_checklist_due_time.sql is not applied.', 500);
+    if (/(due_at|due_time|monthly_days|checklist_items|checklist_templates)/i.test(error.message || '') && /(column|relation|schema cache|does not exist)/i.test(error.message || '')) {
+      return responseError(/monthly_days/i.test(error.message || '') ? 'Checklist database migration 006_checklist_monthly_days.sql is not applied.' : 'Checklist database migration 004_checklist_due_time.sql is not applied.', 500);
     }
     return responseError('Checklist generation failed. Check the server logs for the database error.', 500);
   }

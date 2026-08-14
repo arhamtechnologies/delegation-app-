@@ -30,7 +30,7 @@ export default function ChecklistTaskDetail() {
     if (!user || !employee) { setLoading(false); return; }
     const { data, error: itemError } = await supabaseBrowser()
       .from('checklist_items')
-      .select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by,employee:employees!checklist_items_employee_id_fkey(id,name,email),template:checklist_templates!checklist_items_template_id_fkey(frequency,weekday,day_of_month,start_date,due_time)')
+      .select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by,employee:employees!checklist_items_employee_id_fkey(id,name,email),template:checklist_templates!checklist_items_template_id_fkey(frequency,weekday,day_of_month,monthly_days,start_date,due_time)')
       .eq('id', id)
       .maybeSingle();
     if (itemError) setError(itemError.message);
