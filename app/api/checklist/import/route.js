@@ -1,6 +1,7 @@
 import { getChecklistBusinessDate } from '../../../../lib/checklist-time';
 import { authorizeChecklistManager, checklistApiError } from '../../../../lib/checklist-server';
 import { checklistImportMaxBytes, parseChecklistWorkbook, templateRowsForImport } from '../../../../lib/checklist-import';
+import { createServerNotifications, notificationFingerprint } from '../../../../lib/notifications-server';
 
 export const runtime = 'nodejs';
 const timeZone = process.env.CHECKLIST_TIMEZONE || 'Asia/Kolkata';
@@ -34,11 +35,29 @@ export async function POST(request) {
 
     const records = templateRowsForImport(parsed.rows, { allowDuplicates: parsed.allowDuplicates, createdBy: parsed.user.id, startDate: parsed.startDate });
     if (!records.length) return checklistApiError('There are no valid checklist tasks to import.', 400);
-    const { data: created, error: insertError } = await authorization.admin.from('checklist_templates').insert(records).select('id');
+    const { data: created, error: insertError } = await authorization.admin.from('checklist_templates').insert(records).select('id,employee_id,task');
     if (insertError) {
       console.error('Checklist import insert failed.', { code: insertError.code, message: insertError.message });
       return checklistApiError('The checklist import could not be completed. No templates were created.', 500);
     }
+    const grouped = new Map();
+    (created || []).forEach((template) => {
+      const current = grouped.get(template.employee_id) || [];
+      current.push(template);
+      grouped.set(template.employee_id, current);
+    });
+    await createServerNotifications(authorization.admin, [...grouped.entries()]
+      .filter(([employeeId]) => employeeId !== authorization.employee.id)
+      .map(([employeeId, templates]) => ({
+        recipient_employee_id: employeeId,
+        actor_employee_id: authorization.employee.id,
+        kind: 'checklist_imported',
+        title: 'Checklist tasks imported',
+        body: `${templates.length} new checklist task${templates.length === 1 ? '' : 's'} ${templates.length === 1 ? 'was' : 'were'} added to your work.`,
+        entity_type: 'checklist_template',
+        entity_id: templates[0].id,
+        dedupe_key: `checklist_imported:${notificationFingerprint(templates.map((template) => template.id).sort())}:${employeeId}`,
+      })));
     return Response.json({ success: true, imported: true, created: created?.length || 0, skippedDuplicates: parsed.allowDuplicates ? 0 : parsed.summary.duplicates, errors: parsed.summary.errors, errorRows: parsed.rows.filter((row) => !['Ready', 'Duplicate'].includes(row.status)) });
   } catch (error) {
     console.error('Checklist import failed.', { message: error.message });

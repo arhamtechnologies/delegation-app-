@@ -153,9 +153,10 @@ export default function Checklist() {
     if (form.frequency === 'weekly' && form.weekday === '') { setError('Choose a day of the week.'); setSaving(false); return; }
     if (form.frequency === 'monthly' && !form.monthly_days.length) { setError('Choose at least one monthly day.'); setSaving(false); return; }
     const record = { employee_id: form.employee_id, task: form.task.trim(), frequency: form.frequency, weekday: form.frequency === 'weekly' ? Number(form.weekday) : null, day_of_month: form.frequency === 'monthly' ? Number(form.monthly_days[0]) : null, monthly_days: form.frequency === 'monthly' ? form.monthly_days.map(Number) : [], start_date: form.start_date, due_time: form.due_time, active: form.active };
-    const supabase = supabaseBrowser();
-    const response = editing ? await supabase.from('checklist_templates').update(record).eq('id', editing.id) : await supabase.from('checklist_templates').insert({ ...record, created_by: data.userId });
-    if (response.error) setError(response.error.message);
+    const token = await getAccessToken();
+    const response = await fetch('/api/checklist/templates', { method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(editing ? { ...record, id: editing.id } : record) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) setError(payload.error || 'The checklist template could not be saved.');
     else { setMessage(editing ? 'Checklist updated.' : 'Checklist created and scheduled.'); closeModal(); const generationResponse = await triggerChecklistGeneration(); if (!generationResponse?.success) setError(generationResponse?.error || 'Checklist saved, but its current item could not be generated.'); await load(); }
     setSaving(false);
   }
@@ -163,15 +164,19 @@ export default function Checklist() {
   async function deactivate(template) {
     const label = template.active ? 'deactivate' : 'activate';
     if (!window.confirm(`${label[0].toUpperCase()}${label.slice(1)} this recurring checklist?`)) return;
-    const { error: updateError } = await supabaseBrowser().from('checklist_templates').update({ active: !template.active }).eq('id', template.id);
-    if (updateError) setError(updateError.message); else { setMessage(`Checklist ${template.active ? 'deactivated' : 'activated'}.`); await load(); }
+    const token = await getAccessToken();
+    const response = await fetch('/api/checklist/templates', { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id: template.id, employee_id: template.employee_id, task: template.task, frequency: template.frequency, weekday: template.weekday, day_of_month: template.day_of_month, monthly_days: template.monthly_days || [], start_date: template.start_date, due_time: template.due_time?.slice(0, 5), active: !template.active }) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) setError(payload.error || 'The checklist template could not be updated.'); else { setMessage(`Checklist ${template.active ? 'deactivated' : 'activated'}.`); await load(); }
   }
 
-    async function softDelete(template) {
-      if (!window.confirm('Delete this checklist template? Existing generated history will remain available.')) return;
-      const { error: updateError } = await supabaseBrowser().from('checklist_templates').update({ active: false }).eq('id', template.id);
-      if (updateError) setError(updateError.message); else { setMessage('Checklist deactivated.'); await load(); }
-    }
+  async function softDelete(template) {
+    if (!window.confirm('Delete this checklist template? Existing generated history will remain available.')) return;
+    const token = await getAccessToken();
+    const response = await fetch('/api/checklist/templates', { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id: template.id, employee_id: template.employee_id, task: template.task, frequency: template.frequency, weekday: template.weekday, day_of_month: template.day_of_month, monthly_days: template.monthly_days || [], start_date: template.start_date, due_time: template.due_time?.slice(0, 5), active: false }) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) setError(payload.error || 'The checklist template could not be deactivated.'); else { setMessage('Checklist deactivated.'); await load(); }
+  }
 
   async function completeItem(item) {
     if (completing || getChecklistStatus(item) === 'completed') return;

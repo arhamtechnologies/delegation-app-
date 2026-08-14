@@ -146,6 +146,11 @@ h1, h2, h3, p { margin-top: 0; }
 .checklist-days small { color: var(--muted); font-size: 9px; }
 
 .notification-assignment { background: #e4f8f2; color: var(--mint); }
+.notification-checklist { background: #f0edff; color: var(--purple); }
+.notification-completed { background: #e4f8f2; color: var(--mint); }
+.notification-summary-actions { display: flex; align-items: center; gap: 12px; }
+.notification-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 16px 20px 19px; border-top: 1px solid #f0f1f6; color: var(--muted); font-size: 10px; }
+.notification-action { display: inline-flex; align-items: center; color: #a6afc0; }
 
 .page-header-tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex: 0 1 auto; min-width: 0; }
 .notification-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted-strong); box-shadow: var(--shadow-soft); }

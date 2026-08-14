@@ -1,5 +1,6 @@
 import { buildChecklistTemplateKey } from '../../../../lib/checklist-import';
 import { authorizeChecklistManager, checklistApiError } from '../../../../lib/checklist-server';
+import { createServerNotifications, notificationFingerprint } from '../../../../lib/notifications-server';
 
 const frequencyValues = new Set(['daily', 'weekly', 'every_15_days', 'monthly']);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -81,5 +82,28 @@ export async function POST(request) {
     console.error('Checklist bulk update failed.', { code: updateError?.code, message: updateError?.message });
     return checklistApiError('The selected checklist templates could not be updated.', 500);
   }
+  const grouped = new Map();
+  nextTemplates.forEach((template) => {
+    const previous = templates.find((candidate) => candidate.id === template.id);
+    const recipientIds = new Set([template.employee_id]);
+    if (previous.employee_id !== template.employee_id) recipientIds.add(previous.employee_id);
+    recipientIds.forEach((employeeId) => {
+      const current = grouped.get(employeeId) || [];
+      current.push(template);
+      grouped.set(employeeId, current);
+    });
+  });
+  await createServerNotifications(authorization.admin, [...grouped.entries()]
+    .filter(([employeeId]) => employeeId !== authorization.employee.id)
+    .map(([employeeId, employeeTemplates]) => ({
+      recipient_employee_id: employeeId,
+      actor_employee_id: authorization.employee.id,
+      kind: 'checklist_bulk_updated',
+      title: 'Checklist tasks updated',
+      body: `${employeeTemplates.length} checklist task${employeeTemplates.length === 1 ? '' : 's'} were updated.`,
+      entity_type: 'checklist_template',
+      entity_id: employeeTemplates[0].id,
+      dedupe_key: `checklist_bulk_updated:${notificationFingerprint([...ids].sort(), JSON.stringify(normalizedChanges))}:${employeeId}`,
+    })));
   return Response.json({ success: true, updated: updated.length });
 }

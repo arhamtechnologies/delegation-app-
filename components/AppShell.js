@@ -57,8 +57,6 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
           return;
         }
 
-        const { count, error: notificationError } = await getUnreadNotificationCount();
-        if (notificationError) console.error('Unable to load unread notification count.', { code: notificationError.code, message: notificationError.message });
         if (!employee) {
           if (active) {
             setProfile(null);
@@ -66,6 +64,9 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
           }
           return;
         }
+
+        const { count, error: notificationError } = await getUnreadNotificationCount(employee.id);
+        if (notificationError) console.error('Unable to load unread notification count.', { code: notificationError.code, message: notificationError.message });
 
         if (employee.must_change_password) {
           if (active) {
@@ -103,14 +104,33 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
   }, [router]);
 
   useEffect(() => {
+    if (authState !== 'authenticated' || !profile?.id) return undefined;
+    let active = true;
+    const supabase = supabaseBrowser();
+
     async function refreshUnreadCount() {
-      const { count, error } = await getUnreadNotificationCount();
+      const { count, error } = await getUnreadNotificationCount(profile.id);
       if (error) console.error('Unable to refresh unread notification count.', { code: error.code, message: error.message });
-      else setUnreadCount(count || 0);
+      else if (active) setUnreadCount(count || 0);
     }
+
+    const channel = supabase
+      .channel(`notifications-${profile.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_employee_id=eq.${profile.id}` }, () => {
+        if (!active) return;
+        setUnreadCount((current) => current + 1);
+        window.dispatchEvent(new Event('notifications:changed'));
+      })
+      .subscribe();
+    const pollingTimer = window.setInterval(refreshUnreadCount, 30000);
     window.addEventListener('notifications:changed', refreshUnreadCount);
-    return () => window.removeEventListener('notifications:changed', refreshUnreadCount);
-  }, []);
+    return () => {
+      active = false;
+      window.clearInterval(pollingTimer);
+      window.removeEventListener('notifications:changed', refreshUnreadCount);
+      supabase.removeChannel(channel);
+    };
+  }, [authState, profile?.id]);
 
   useEffect(() => { setMenuOpen(false); }, [pathname]);
 
