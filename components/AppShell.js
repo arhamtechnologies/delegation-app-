@@ -43,44 +43,61 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
   useEffect(() => {
     let active = true;
     const supabase = supabaseBrowser();
-    (async () => {
-      const { user, employee, error: authError } = await getCurrentEmployee();
-      if (!user) {
-        if (authError && authError.message !== 'Auth session missing!') console.error('Unable to verify the current session.', { code: authError.code, message: authError.message });
-        if (active) {
-          setAuthState('signed_out');
+    let profileRequest = null;
+
+    async function loadProfile() {
+      if (profileRequest) return profileRequest;
+      profileRequest = (async () => {
+        const { user, employee, error: authError } = await getCurrentEmployee();
+        if (!user) {
+          if (authError && authError.message !== 'Auth session missing!') console.error('Unable to verify the current session.', { code: authError.code, message: authError.message });
+          if (active) {
+            setAuthState('signed_out');
+          }
+          return;
         }
-        return;
-      }
-      const { count, error: notificationError } = await getUnreadNotificationCount();
-      if (notificationError) console.error('Unable to load unread notification count.', { code: notificationError.code, message: notificationError.message });
-      if (!employee) {
-        if (active) {
-          setProfile(null);
-          setAuthState('signed_out');
+
+        const { count, error: notificationError } = await getUnreadNotificationCount();
+        if (notificationError) console.error('Unable to load unread notification count.', { code: notificationError.code, message: notificationError.message });
+        if (!employee) {
+          if (active) {
+            setProfile(null);
+            setAuthState('signed_out');
+          }
+          return;
         }
-        return;
-      }
-      if (employee.must_change_password) {
+
+        if (employee.must_change_password) {
+          if (active) {
+            setProfile(employee);
+            setAuthState('password_change_required');
+            router.replace('/change-password');
+          }
+          return;
+        }
+
         if (active) {
           setProfile(employee);
-          setAuthState('password_change_required');
-          router.replace('/change-password');
+          setUnreadCount(count || 0);
+          setAuthState('authenticated');
         }
-        return;
-      }
-      if (active) {
-        setProfile(employee);
-        setUnreadCount(count || 0);
-        setAuthState('authenticated');
-      }
-    })();
+      })().finally(() => {
+        profileRequest = null;
+      });
+      return profileRequest;
+    }
+
+    loadProfile();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT' && active) {
+      if (!active) return;
+      if (event === 'SIGNED_OUT') {
         setProfile(null);
         setUnreadCount(0);
         setAuthState('signed_out');
       }
+      if (event === 'SIGNED_IN') loadProfile();
+      if (event === 'TOKEN_REFRESHED') return;
+      if (event === 'PASSWORD_RECOVERY') return;
     });
     return () => { active = false; subscription.unsubscribe(); };
   }, [router]);
