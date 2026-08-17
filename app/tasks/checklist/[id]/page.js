@@ -55,7 +55,7 @@ export default function ChecklistTaskDetail() {
   if (!item) return <AppShell title="Checklist not found" eyebrow="Workspace / Tasks"><EmptyState icon="checkSquare" title="This checklist item is unavailable" description={error || 'It may not have been generated yet or you may not have access to it.'} action="Back to tasks" href="/tasks" /></AppShell>;
 
   const status = getChecklistStatus(item);
-  const canComplete = canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id);
+  const canComplete = canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) && status !== 'deactivated';
   return <AppShell title="Checklist details" eyebrow="Workspace / Tasks" actions={<Link className="button button-ghost button-small" href="/tasks"><Icon name="chevronRight" size={15} className="flip-icon" />Back to tasks</Link>}>
     {error && <div className="inline-alert error"><Icon name="warning" size={16} />{error}</div>}
     <div className="detail-layout">
@@ -63,7 +63,7 @@ export default function ChecklistTaskDetail() {
         <div className="detail-topline"><div className="detail-tags"><span className="task-source-badge"><Icon name="checkSquare" size={13} />Checklist</span></div><StatusBadge status={status} /></div>
         <h2 className="detail-title">{item.task}</h2>
         <p className="detail-description">Recurring checklist work assigned from the employee&apos;s active schedule.</p>
-        <div className="automatic-status-panel"><span className="automatic-status-label">Automatic status</span><StatusBadge status={status} /><p>{status === 'completed' ? 'This checklist item has been completed.' : status === 'overdue' ? 'The due time has passed and the checklist item is not complete.' : 'The checklist item is due today or in the future.'}</p></div>
+        <div className="automatic-status-panel"><span className="automatic-status-label">Automatic status</span><StatusBadge status={status} /><p>{status === 'completed' ? 'This checklist item has been completed.' : status === 'deactivated' ? 'This checklist item was deactivated because its date is a non-working day.' : status === 'overdue' ? 'The due time has passed and the checklist item is not complete.' : 'The checklist item is due today or in the future.'}</p></div>
         <div className="detail-metadata">
           <div><span className="metadata-icon"><Icon name="user" size={16} /></span><span><small>Employee</small><strong>{item.employee?.name || 'Unknown employee'}</strong></span></div>
           <div><span className="metadata-icon"><Icon name="list" size={16} /></span><span><small>Frequency</small><strong>{frequencyLabel(item.template?.frequency)}</strong></span></div>

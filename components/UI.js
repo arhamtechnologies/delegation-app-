@@ -6,6 +6,7 @@ export const statusMeta = {
   pending: { label: 'Pending', tone: 'blue', icon: 'clock' },
   overdue: { label: 'Overdue', tone: 'red', icon: 'warning' },
   completed: { label: 'Completed', tone: 'green', icon: 'checkCircle' },
+  deactivated: { label: 'Deactivated', tone: 'slate', icon: 'close' },
 };
 
 export const priorityMeta = {

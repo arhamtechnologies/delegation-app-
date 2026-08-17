@@ -60,6 +60,7 @@ export async function POST(request, { params }) {
   if (item.status === 'completed') {
     return Response.json({ success: true, alreadyCompleted: true, item });
   }
+  if (item.status === 'deactivated') return errorResponse('This checklist item has been deactivated and cannot be completed.', 409);
 
   const { data: updatedItems, error: updateError } = await admin
     .from('checklist_items')
