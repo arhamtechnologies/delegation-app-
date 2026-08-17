@@ -92,12 +92,16 @@ export default function Notifications() {
   useEffect(() => { loadNotifications(); }, [loadNotifications]);
 
   useEffect(() => {
-    const refresh = () => loadNotifications();
+    const refresh = () => {
+      if (document.visibilityState === 'visible') loadNotifications();
+    };
     window.addEventListener('notifications:changed', refresh);
     const timer = window.setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', refresh);
     return () => {
       window.removeEventListener('notifications:changed', refresh);
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
     };
   }, [loadNotifications]);
 

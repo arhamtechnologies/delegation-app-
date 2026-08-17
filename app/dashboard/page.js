@@ -6,8 +6,8 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, MetricCard, PriorityBadge, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { formatChecklistDueAt, getChecklistItems } from '../../lib/checklist-data';
-import { formatTaskDeadline, getTasks } from '../../lib/task-data';
+import { formatChecklistDueAt, getChecklistDashboardData } from '../../lib/checklist-data';
+import { formatTaskDeadline, getTaskDashboardData } from '../../lib/task-data';
 import { getTodaysWorkItems, getWorkItemStatus, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
 
 function MetricSkeleton() {
@@ -24,14 +24,6 @@ function getTaskDueDisplay(task) {
     label: formatTaskDeadline(task, { relative: true }),
     overdue: getWorkItemStatus(task) === 'overdue',
   };
-}
-
-function getDashboardMetrics(workItems, now) {
-  return workItems.reduce((metrics, workItem) => {
-    const status = getWorkItemStatus(workItem, now);
-    metrics[status] += 1;
-    return metrics;
-  }, { total: workItems.length, pending: 0, overdue: 0, completed: 0 });
 }
 
 function DashboardTaskRow({ task }) {
@@ -74,8 +66,8 @@ export default function Dashboard() {
     }
 
     const [taskResponse, checklistResponse] = await Promise.all([
-      getTasks({ limit: 200 }),
-      getChecklistItems({ limit: 500 }),
+      getTaskDashboardData(),
+      getChecklistDashboardData(),
     ]);
 
     if (taskResponse.error) {
@@ -84,18 +76,25 @@ export default function Dashboard() {
       return;
     }
 
-    const checklistItems = checklistResponse.data || [];
+    const checklistItems = checklistResponse.data?.todayItems || [];
     if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
     const workItems = [
-      ...(taskResponse.data || []).map(toTaskWorkItem),
+      ...(taskResponse.data?.todayTasks || []).map(toTaskWorkItem),
       ...checklistItems.map(toChecklistWorkItem),
     ];
     const now = new Date();
+    const taskMetrics = taskResponse.data?.metrics || {};
+    const checklistMetrics = checklistResponse.data?.metrics || {};
 
     setDashboardData({
       name: employee.name,
       role: employee.role,
-      metrics: getDashboardMetrics(workItems, now),
+      metrics: {
+        total: (taskMetrics.total || 0) + (checklistMetrics.total || 0),
+        pending: (taskMetrics.pending || 0) + (checklistMetrics.pending || 0),
+        overdue: (taskMetrics.overdue || 0) + (checklistMetrics.overdue || 0),
+        completed: (taskMetrics.completed || 0) + (checklistMetrics.completed || 0),
+      },
       todayTasks: getTodaysWorkItems(workItems, now),
     });
     setLoading(false);

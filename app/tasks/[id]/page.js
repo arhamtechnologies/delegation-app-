@@ -65,7 +65,7 @@ export default function TaskDetail() {
     if (!remark.trim()) return;
     setSaving(true);
     setError('');
-    const { data: { user } = {} } = await supabaseBrowser().auth.getUser();
+    const user = await getAuthenticatedUser();
     if (!user) {
       setError('Your session has expired. Please sign in again.');
       setSaving(false);

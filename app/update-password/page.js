@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
+import { clearAuthCache, syncAuthSession } from '../../lib/auth';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
 const INVALID_LINK_MESSAGE = 'This password reset link is invalid or has expired. Please request a new password reset link.';
@@ -32,8 +33,9 @@ export default function UpdatePassword() {
       return () => { active = false; };
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
+      if (session) syncAuthSession(session);
       if (event === 'PASSWORD_RECOVERY') {
         recoveryDetected = true;
         setReady(true);
@@ -75,6 +77,7 @@ export default function UpdatePassword() {
       return;
     }
     await supabaseBrowser().auth.signOut();
+    clearAuthCache();
     router.replace('/login?reset=success');
     router.refresh();
   }

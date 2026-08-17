@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
-import { supabaseBrowser } from '../../lib/supabase-browser';
+import { clearAuthCache, getAccessToken, getCurrentEmployee } from '../../lib/auth';
 
 export default function ChangePassword() {
   const router = useRouter();
@@ -17,13 +17,11 @@ export default function ChangePassword() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const supabase = supabaseBrowser();
-      const { data: { user } = {} } = await supabase.auth.getUser();
+      const { user, employee: profile, error: profileError } = await getCurrentEmployee();
       if (!user) {
         router.replace('/login');
         return;
       }
-      const { data: profile, error: profileError } = await supabase.from('employees').select('name,must_change_password').eq('auth_user_id', user.id).maybeSingle();
       if (!active) return;
       if (profileError || !profile) {
         setError('Your employee profile could not be loaded. Contact your administrator.');
@@ -53,8 +51,8 @@ export default function ChangePassword() {
     }
 
     setSaving(true);
-    const { data: { session } = {} } = await supabaseBrowser().auth.getSession();
-    if (!session?.access_token) {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
       setError('Your session has expired. Please sign in again.');
       setSaving(false);
       return;
@@ -63,7 +61,7 @@ export default function ChangePassword() {
     try {
       const response = await fetch('/api/account/complete-password-change', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ password }),
       });
       const result = await response.json().catch(() => ({}));
@@ -72,6 +70,7 @@ export default function ChangePassword() {
         setSaving(false);
         return;
       }
+      clearAuthCache();
       router.replace('/dashboard');
       router.refresh();
     } catch {

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { supabaseBrowser } from '../lib/supabase-browser';
-import { getCurrentEmployee } from '../lib/auth';
+import { clearAuthCache, getCurrentEmployee, syncAuthSession } from '../lib/auth';
 import { getUnreadNotificationCount } from '../lib/notifications';
 import { Icon } from './Icons';
 
@@ -89,8 +89,10 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
     }
 
     loadProfile();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
+      if (event === 'SIGNED_OUT') clearAuthCache();
+      else if (session) syncAuthSession(session);
       if (event === 'SIGNED_OUT') {
         setProfile(null);
         setUnreadCount(0);
@@ -109,7 +111,8 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
     const supabase = supabaseBrowser();
 
     async function refreshUnreadCount() {
-      const { count, error } = await getUnreadNotificationCount(profile.id);
+      if (document.visibilityState !== 'visible') return;
+      const { count, error } = await getUnreadNotificationCount(profile.id, { force: true });
       if (error) console.error('Unable to refresh unread notification count.', { code: error.code, message: error.message });
       else if (active) setUnreadCount(count || 0);
     }
@@ -124,10 +127,12 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
       .subscribe();
     const pollingTimer = window.setInterval(refreshUnreadCount, 30000);
     window.addEventListener('notifications:changed', refreshUnreadCount);
+    document.addEventListener('visibilitychange', refreshUnreadCount);
     return () => {
       active = false;
       window.clearInterval(pollingTimer);
       window.removeEventListener('notifications:changed', refreshUnreadCount);
+      document.removeEventListener('visibilitychange', refreshUnreadCount);
       supabase.removeChannel(channel);
     };
   }, [authState, profile?.id]);

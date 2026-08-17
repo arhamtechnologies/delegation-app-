@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { Avatar, EmptyState, MetricCard, Modal, SectionHeader } from '../../components/UI';
-import { getCurrentEmployee } from '../../lib/auth';
+import { getAccessToken, getCurrentEmployee, invalidateCurrentEmployee } from '../../lib/auth';
 import { supabaseBrowser } from '../../lib/supabase-browser';
+import { clearTaskEmployeeCaches } from '../../lib/task-data';
 
 const emptyEmployee = { name: '', email: '', mobile: '', role: 'doer', active: true, password: '' };
 const roleLabels = { super_admin: 'Super admin', assigner: 'Assigner', ea: 'Executive assistant', doer: 'Doer' };
@@ -84,8 +85,8 @@ export default function Employees() {
     }
 
     setResetSaving(true);
-    const { data: { session } = {} } = await supabaseBrowser().auth.getSession();
-    if (!session?.access_token) {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
       setResetError('Your session has expired. Please sign in again.');
       setResetSaving(false);
       return;
@@ -93,7 +94,7 @@ export default function Employees() {
     try {
       const response = await fetch('/api/admin/employees/reset-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ employee_id: resetEmployee.id, password: resetPassword }),
       });
       const result = await response.json().catch(() => ({}));
@@ -127,12 +128,12 @@ export default function Employees() {
       } else {
         if (emailChanged && currentRole === 'super_admin') {
           try {
-            const { data: { session } = {} } = await supabaseBrowser().auth.getSession();
-            if (!session?.access_token) saveError = { message: 'Your session has expired. Please sign in again.' };
+            const accessToken = await getAccessToken();
+            if (!accessToken) saveError = { message: 'Your session has expired. Please sign in again.' };
             else {
               const response = await fetch('/api/admin/employees/update-email', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ employee_id: editing.id, email: normalizedEmail }),
               });
               const result = await response.json().catch(() => ({}));
@@ -151,13 +152,13 @@ export default function Employees() {
         }
       }
     } else {
-      const { data: { session } = {} } = await supabaseBrowser().auth.getSession();
-      if (!session?.access_token) saveError = { message: 'Your session has expired. Please sign in again.' };
+      const accessToken = await getAccessToken();
+      if (!accessToken) saveError = { message: 'Your session has expired. Please sign in again.' };
       else {
         try {
           const response = await fetch('/api/admin/employees', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
             body: JSON.stringify(form),
           });
           const result = await response.json().catch(() => ({}));
@@ -168,7 +169,7 @@ export default function Employees() {
       }
     }
     if (saveError) setError(saveError.message);
-    else { setMessage(emailUpdated ? 'Email updated successfully.' : editing ? 'Employee details updated.' : 'Employee added with a login account.'); await load(); closeModal(); }
+    else { setMessage(emailUpdated ? 'Email updated successfully.' : editing ? 'Employee details updated.' : 'Employee added with a login account.'); invalidateCurrentEmployee(); clearTaskEmployeeCaches(); await load(); closeModal(); }
     setSaving(false);
   }
 
@@ -176,7 +177,7 @@ export default function Employees() {
     if (!window.confirm(`${employee.active ? 'Deactivate' : 'Activate'} ${employee.name}?`)) return;
     const { error: updateError } = await supabaseBrowser().from('employees').update({ active: !employee.active }).eq('id', employee.id);
     if (updateError) setError(updateError.message);
-    else { setMessage(`${employee.name} is now ${employee.active ? 'inactive' : 'active'}.`); load(); }
+    else { setMessage(`${employee.name} is now ${employee.active ? 'inactive' : 'active'}.`); invalidateCurrentEmployee(); clearTaskEmployeeCaches(); load(); }
   }
 
   return <AppShell title="People" eyebrow="Manage / People" description="Keep your workspace roster, roles, and availability in sync." actions={<button className="button button-primary" type="button" onClick={openCreate}><Icon name="plus" size={17} />Add employee</button>}>

@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, Modal, SectionHeader, StatusBadge } from '../../components/UI';
-import { getCurrentEmployee } from '../../lib/auth';
-import { canDeactivateNonWorkingDayTasks, canManageChecklists, checklistFrequencies, checklistWeekdays, formatChecklistDays, formatChecklistDueAt, formatChecklistTime, formatEmployeeId, getBusinessDate, getChecklistSchemaError, getChecklistStatus, setChecklistCompletion, triggerChecklistGeneration } from '../../lib/checklist-data';
+import { getAccessToken, getCurrentEmployee } from '../../lib/auth';
+import { canDeactivateNonWorkingDayTasks, canManageChecklists, checklistFrequencies, checklistWeekdays, formatChecklistDays, formatChecklistDueAt, formatChecklistTime, formatEmployeeId, getBusinessDate, getChecklistDashboardData, getChecklistSchemaError, getChecklistStatus, setChecklistCompletion, triggerChecklistGeneration } from '../../lib/checklist-data';
 import { defaultChecklistTimeZone, getChecklistBusinessDate } from '../../lib/checklist-time';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
@@ -25,11 +25,6 @@ function ChecklistItemCard({ item, onComplete, completing }) {
 
 function todayLocalDate() {
   return getBusinessDate();
-}
-
-async function getAccessToken() {
-  const { data: { session } = {} } = await supabaseBrowser().auth.getSession();
-  return session?.access_token || null;
 }
 
 function ImportModal({ open, onClose, startDate, setStartDate, file, setFile, preview, result, allowDuplicates, setAllowDuplicates, loading, error, onPreview, onImport, onReset }) {
@@ -168,32 +163,35 @@ export default function Checklist() {
     if (!user) { setLoading(false); return; }
     if (employeeError || !employee) { setError('Unable to load your workspace profile. Please try again.'); setLoading(false); return; }
     const manager = canManageChecklists(employee.role);
-    const generationResponse = manager ? await triggerChecklistGeneration() : null;
+    const generationRequest = manager ? triggerChecklistGeneration() : Promise.resolve(null);
     const supabase = supabaseBrowser();
-    let itemQuery = supabase.from('checklist_items').select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by,created_at,employee:employees!checklist_items_employee_id_fkey(id,name,email)').order('due_at', { ascending: false }).limit(500);
-    if (!manager) itemQuery = itemQuery.neq('status', 'deactivated');
-    const [itemResponse, templateResponse, employeeResponse] = await Promise.all([
-      itemQuery,
+    const configRequest = canDeactivateNonWorkingDayTasks(employee.role) ? (async () => {
+      const token = await getAccessToken();
+      const response = await fetch('/api/checklist/non-working-days', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const payload = await response.json().catch(() => ({}));
+      return { response, payload };
+    })() : Promise.resolve({ response: null, payload: {} });
+    const [templateResponse, employeeResponse, configResult] = await Promise.all([
       manager ? supabase.from('checklist_templates').select('id,employee_id,task,frequency,weekday,day_of_month,monthly_days,start_date,due_time,active,created_at,updated_at,employee:employees!checklist_templates_employee_id_fkey(id,name,email)').order('active', { ascending: false }).order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
       manager ? supabase.from('employees').select('id,name,email,active,role').order('name') : Promise.resolve({ data: [], error: null }),
+      configRequest,
     ]);
+    const generationResponse = await generationRequest;
+    const itemResponse = await getChecklistDashboardData();
     const responseError = getChecklistSchemaError(itemResponse.error || templateResponse.error || employeeResponse.error);
     if (responseError) { setError(responseError.message || 'Unable to load checklist data. Please try again.'); setLoading(false); return; }
     let holidays = [];
     let employeeLeave = [];
     if (canDeactivateNonWorkingDayTasks(employee.role)) {
-      const token = await getAccessToken();
-      const configResponse = await fetch('/api/checklist/non-working-days', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      const configPayload = await configResponse.json().catch(() => ({}));
-      if (configResponse.ok) {
-        holidays = configPayload.holidays || [];
-        employeeLeave = configPayload.employeeLeave || [];
+      if (configResult.response?.ok) {
+        holidays = configResult.payload.holidays || [];
+        employeeLeave = configResult.payload.employeeLeave || [];
         setHolidayError('');
       } else {
-        setHolidayError(configPayload.error || 'Non-working-day settings could not be loaded. Apply the latest Supabase migration, then retry.');
+        setHolidayError(configResult.payload.error || 'Non-working-day settings could not be loaded. Apply the latest Supabase migration, then retry.');
       }
     } else setHolidayError('');
-    setData({ userId: user.id, employee, manager, items: itemResponse.data || [], templates: templateResponse.data || [], employees: employeeResponse.data || [], holidays, employeeLeave });
+    setData({ userId: user.id, employee, manager, items: itemResponse.data?.todayItems || [], metrics: itemResponse.data?.metrics || {}, templates: templateResponse.data || [], employees: employeeResponse.data || [], holidays, employeeLeave });
     if (generationResponse && !generationResponse.success) setError(generationResponse.error || 'Checklist generation failed.');
     setLoading(false);
   }
@@ -416,7 +414,7 @@ export default function Checklist() {
     {message && <div className="inline-alert success"><Icon name="checkCircle" size={16} />{message}</div>}
     {error && !modalOpen && !importOpen && !bulkOpen && !nonWorkingDayOpen && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
     {loading ? <section className="panel checklist-loading"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></section> : canManage ? <>
-      <section className="task-summary-row checklist-summary"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="list" size={16} /></span><div><strong>{templates.length}</strong><span>Templates</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="calendar" size={16} /></span><div><strong>{todayItems.length}</strong><span>Today&apos;s items</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{items.filter((item) => getChecklistStatus(item) === 'overdue').length}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{items.filter((item) => getChecklistStatus(item) === 'completed').length}</strong><span>Completed</span></div></div></section>
+      <section className="task-summary-row checklist-summary"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="list" size={16} /></span><div><strong>{templates.length}</strong><span>Templates</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="calendar" size={16} /></span><div><strong>{todayItems.length}</strong><span>Today&apos;s items</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{data.metrics?.overdue || 0}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{data.metrics?.completed || 0}</strong><span>Completed</span></div></div></section>
       <section className="panel checklist-panel"><SectionHeader eyebrow="Recurring work" title="Checklist templates" description="Set the recurring rule once. Scheduled items are generated automatically when due." />
         <div className="filter-bar checklist-template-filters"><label className="search-box"><Icon name="search" size={17} /><input aria-label="Search checklist templates" placeholder="Search employees or tasks" value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} /></label><label className="filter-control"><span>Employee</span><select value={templateEmployeeFilter} onChange={(event) => setTemplateEmployeeFilter(event.target.value)}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label><label className="filter-control"><span>Frequency</span><select value={templateFrequencyFilter} onChange={(event) => setTemplateFrequencyFilter(event.target.value)}><option value="all">All frequencies</option>{checklistFrequencies.map((frequency) => <option value={frequency.value} key={frequency.value}>{frequency.label}</option>)}</select></label><label className="filter-control"><span>Status</span><select value={templateStatusFilter} onChange={(event) => setTemplateStatusFilter(event.target.value)}><option value="all">All status</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div>
         {selectedIds.length > 0 && <div className="checklist-bulk-toolbar"><strong>{selectedIds.length} selected</strong><button className="button button-ghost button-small" type="button" onClick={openBulkEdit}>Edit selected</button><button className="button button-ghost button-small" type="button" onClick={bulkDelete}>Delete selected</button><button className="button button-ghost button-small" type="button" onClick={clearSelection}>Clear selection</button></div>}

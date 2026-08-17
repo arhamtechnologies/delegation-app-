@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getCurrentEmployee } from '../../lib/auth';
+import { clearAuthCache, getCurrentEmployee, syncAuthSession } from '../../lib/auth';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 
 export default function Login() {
@@ -30,7 +30,9 @@ export default function Login() {
     }
 
     redirectIfAuthenticated();
-    const { data: { subscription } } = supabaseBrowser().auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabaseBrowser().auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') clearAuthCache();
+      else if (session) syncAuthSession(session);
       if (event === 'SIGNED_IN') redirectIfAuthenticated();
       if (event === 'SIGNED_OUT' && active) setCheckingSession(false);
     });
@@ -50,13 +52,14 @@ export default function Login() {
     setError('');
     setLoading(true);
     const supabase = supabaseBrowser();
-    const { data: { user } = {}, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: { session } = {}, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
       setError(signInError.message);
       setLoading(false);
       return;
     }
-    const { data: employee, error: employeeError } = await supabase.from('employees').select('must_change_password').eq('auth_user_id', user?.id).maybeSingle();
+    syncAuthSession(session);
+    const { employee, error: employeeError } = await getCurrentEmployee();
     if (employeeError || !employee) {
       await supabase.auth.signOut();
       setError('This account is not linked to a workspace employee profile. Contact your administrator.');

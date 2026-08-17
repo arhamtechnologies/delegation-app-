@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, Modal, PriorityBadge, SectionHeader, StatusBadge } from '../../components/UI';
@@ -59,7 +59,7 @@ export default function Tasks() {
     setModalOpen(true);
   }
 
-  async function load() {
+  const load = useCallback(async (overrides = {}) => {
     setLoading(true);
     setError('');
     const { user, employee, error: employeeError } = await getCurrentEmployee();
@@ -70,12 +70,19 @@ export default function Tasks() {
       return;
     }
 
-    const employeeRequest = canCreateTasks(employee.role)
+    const manager = canCreateTasks(employee.role);
+    const selectedEmployeeId = Object.prototype.hasOwnProperty.call(overrides, 'employeeId') ? overrides.employeeId : (employeeFilter === 'all' ? null : employeeFilter);
+    const selectedStatus = overrides.status ?? status;
+    const selectedPriority = overrides.priority ?? priority;
+    const employeeRequest = manager
       ? getTaskEmployees()
       : Promise.resolve({ data: [employee], error: null });
+    const checklistRequest = selectedPriority !== 'all' && selectedPriority !== 'normal'
+      ? Promise.resolve({ data: [], error: null })
+      : getChecklistItems({ limit: 500, employeeId: selectedEmployeeId || (!manager ? employee.id : null), status: selectedStatus === 'all' ? undefined : selectedStatus });
     const [taskResponse, checklistResponse, employeeResponse] = await Promise.all([
-      getTasks({ limit: 200 }),
-      getChecklistItems({ limit: 500 }),
+      getTasks({ limit: 200, assigneeId: selectedEmployeeId || undefined, status: selectedStatus === 'all' ? undefined : selectedStatus, priority: selectedPriority }),
+      checklistRequest,
       employeeRequest,
     ]);
     const responseError = taskResponse.error || employeeResponse.error;
@@ -93,9 +100,9 @@ export default function Tasks() {
     });
     if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
     setLoading(false);
-  }
+  }, [employeeFilter, priority, status]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (taskData && !loading && canCreateTasks(taskData.role) && new URLSearchParams(window.location.search).get('create') === '1') openCreateModal();
@@ -154,11 +161,23 @@ export default function Tasks() {
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
   }
 
+  function updateEmployeeFilter(nextEmployeeId) {
+    setEmployeeFilter(nextEmployeeId);
+  }
+
+  function updatePriorityFilter(nextPriority) {
+    setPriority(nextPriority);
+  }
+
   function clearFilters() {
     setSearch('');
     setEmployeeFilter('all');
     setPriority('all');
-    updateStatusFilter('all');
+    setStatus('all');
+    const params = new URLSearchParams(window.location.search);
+    params.delete('status');
+    const query = params.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
   }
 
   return <AppShell title={taskData ? 'Tasks' : 'Loading tasks'} eyebrow="Workspace / Tasks" description="Create, prioritize, and keep every assignment moving." actions={canCreate ? <button className="button button-primary" type="button" onClick={openCreateModal}><Icon name="plus" size={17} />Create task</button> : null}>
@@ -169,9 +188,9 @@ export default function Tasks() {
       <SectionHeader eyebrow="Task inbox" title={taskData ? 'All work' : 'Loading tasks'} description="Search and filter tasks by urgency, owner, or workflow stage." />
       <div className="filter-bar">
         <label className="search-box"><Icon name="search" size={17} /><input aria-label="Search tasks" placeholder="Search tasks, people, or categories" value={search} onChange={(event) => setSearch(event.target.value)} disabled={!taskData} /></label>
-        <label className="filter-control"><span>Employee</span><select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} disabled={!taskData}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label>
+        <label className="filter-control"><span>Employee</span><select value={employeeFilter} onChange={(event) => updateEmployeeFilter(event.target.value)} disabled={!taskData}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label>
         <label className="filter-control"><span>Status</span><select value={status} onChange={(event) => updateStatusFilter(event.target.value)} disabled={!taskData}><option value="all">All status</option><option value="pending">Pending</option><option value="overdue">Overdue</option><option value="completed">Completed</option></select></label>
-        <label className="filter-control"><span>Priority</span><select value={priority} onChange={(event) => setPriority(event.target.value)} disabled={!taskData}><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option></select></label>
+        <label className="filter-control"><span>Priority</span><select value={priority} onChange={(event) => updatePriorityFilter(event.target.value)} disabled={!taskData}><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option></select></label>
         <button className="button button-ghost button-small filter-button" type="button" onClick={clearFilters} disabled={!taskData}><Icon name="filter" size={15} />Clear</button>
       </div>
       {!taskData ? (error ? <div className="data-error-state"><Icon name="warning" size={20} /><strong>Tasks could not be loaded.</strong><span>Check your connection and try again.</span><button className="button button-primary button-small" type="button" onClick={load}>Try again</button></div> : <div className="loading-list task-loading-list" aria-label="Loading tasks"><span /><span /><span /></div>) : filteredTasks.length ? <>
