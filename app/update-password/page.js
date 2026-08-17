@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
 import { clearAuthCache, syncAuthSession } from '../../lib/auth';
-import { supabaseBrowser } from '../../lib/supabase-browser';
+import { supabaseBrowser, supabaseRecoveryBrowser } from '../../lib/supabase-browser';
 
 const INVALID_LINK_MESSAGE = 'This password reset link is invalid or has expired. Please request a new password reset link.';
 
@@ -26,7 +26,8 @@ export default function UpdatePassword() {
     const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
     const queryParams = new URLSearchParams(window.location.search);
     const hasRecoveryError = hashParams.get('error') || hashParams.get('error_code') || hashParams.get('error_description') || queryParams.get('error') || queryParams.get('error_code') || queryParams.get('error_description');
-    const hasRecoveryToken = hashParams.has('access_token') || queryParams.has('code');
+    const hashAccessToken = hashParams.get('access_token');
+    const recoveryCode = queryParams.get('code');
     if (hasRecoveryError) {
       setError(INVALID_LINK_MESSAGE);
       setChecking(false);
@@ -44,12 +45,59 @@ export default function UpdatePassword() {
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } = {} }) => {
+    async function validateRecoverySession() {
+      let initializationError = null;
+      try {
+        // Wait for Supabase to process an implicit recovery hash before reading
+        // the stored session. This also gives PASSWORD_RECOVERY a chance to fire.
+        const { error } = await supabase.auth.initialize();
+        initializationError = error;
+      } catch (error) {
+        initializationError = error;
+      }
+
       if (!active) return;
-      if (recoveryDetected || (session?.user && hasRecoveryToken)) setReady(true);
+
+      let { data: { session } = {} } = await supabase.auth.getSession();
+      let exchangedSession = null;
+
+      // PKCE links arrive with ?code=... and must be exchanged before
+      // updateUser can use the recovery session.
+      if (recoveryCode) {
+        const flowId = queryParams.get('sb_flow_id');
+        const { data, error: exchangeError } = await supabaseRecoveryBrowser().auth.exchangeCodeForSession(
+          recoveryCode,
+          flowId ? { flowId } : undefined,
+        );
+        if (exchangeError) {
+          if (active) {
+            setError(INVALID_LINK_MESSAGE);
+            setChecking(false);
+          }
+          return;
+        }
+        exchangedSession = data?.session || null;
+        session = exchangedSession;
+        if (session) syncAuthSession(session);
+      }
+
+      if (!active) return;
+
+      // A pre-existing session must not make an invalid recovery URL valid.
+      // For hash recovery, the session access token must match the token from
+      // the URL; for PKCE, only the exchanged session is accepted.
+      const validHashSession = Boolean(hashAccessToken && session?.access_token === hashAccessToken);
+      const validRecoverySession = recoveryDetected || validHashSession || Boolean(exchangedSession);
+      if (validRecoverySession && (!initializationError || recoveryDetected || exchangedSession)) {
+        setReady(true);
+        setError('');
+      } else {
+        setError(INVALID_LINK_MESSAGE);
+      }
       setChecking(false);
-      if (!recoveryDetected && !(session?.user && hasRecoveryToken)) setError(INVALID_LINK_MESSAGE);
-    });
+    }
+
+    validateRecoverySession();
 
     return () => {
       active = false;
@@ -76,7 +124,7 @@ export default function UpdatePassword() {
       setSaving(false);
       return;
     }
-    await supabaseBrowser().auth.signOut();
+    await supabaseBrowser().auth.signOut({ scope: 'local' });
     clearAuthCache();
     router.replace('/login?reset=success');
     router.refresh();

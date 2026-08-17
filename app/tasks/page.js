@@ -6,15 +6,31 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, Modal, PriorityBadge, SectionHeader, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { canCompleteChecklist, formatChecklistDueAt, getChecklistItems, setChecklistCompletion } from '../../lib/checklist-data';
+import { canCompleteChecklist, formatChecklistDueAt, getChecklistItems, getChecklistTimeZone, setChecklistCompletion } from '../../lib/checklist-data';
+import { getNextBusinessDate, localDateTimeToIso } from '../../lib/checklist-time';
 import { createTask, formatTaskDeadline, getTaskEmployees, getTasks } from '../../lib/task-data';
-import { getWorkItemStatus, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
+import { getWorkItemScheduledDate, getWorkItemStatus, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
 
 const emptyForm = { title: '', description: '', assignee_id: '', eta: '', due_time: '', start_date: '', priority: 'normal', category: 'General', instructions: '', proof_required: true, completion_notes: null, attachments: [] };
 
 function getLocalDateInputValue() {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
+
+function isValidDateFilter(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return date.getUTCFullYear() === Number(match[1]) && date.getUTCMonth() === Number(match[2]) - 1 && date.getUTCDate() === Number(match[3]);
+}
+
+function getDateFilterRange(dateValue) {
+  const timeZone = getChecklistTimeZone();
+  return {
+    etaFrom: localDateTimeToIso(dateValue, '00:00', timeZone),
+    etaTo: localDateTimeToIso(getNextBusinessDate(dateValue), '00:00', timeZone),
+  };
 }
 
 function TaskSummarySkeleton() {
@@ -37,6 +53,8 @@ export default function Tasks() {
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
+  const [dateFilter, setDateFilter] = useState('');
+  const [filtersReady, setFiltersReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(null);
@@ -44,14 +62,21 @@ export default function Tasks() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    function syncStatusFromUrl() {
-      const value = new URLSearchParams(window.location.search).get('status');
-      setStatus(['pending', 'overdue', 'completed'].includes(value) ? value : 'all');
+    function syncFiltersFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const statusValue = params.get('status');
+      const priorityValue = params.get('priority');
+      const dateValue = params.get('date');
+      setEmployeeFilter(params.get('employee') || 'all');
+      setStatus(['pending', 'overdue', 'completed'].includes(statusValue) ? statusValue : 'all');
+      setPriority(['critical', 'high', 'normal'].includes(priorityValue) ? priorityValue : 'all');
+      setDateFilter(isValidDateFilter(dateValue) ? dateValue : '');
     }
 
-    syncStatusFromUrl();
-    window.addEventListener('popstate', syncStatusFromUrl);
-    return () => window.removeEventListener('popstate', syncStatusFromUrl);
+    syncFiltersFromUrl();
+    setFiltersReady(true);
+    window.addEventListener('popstate', syncFiltersFromUrl);
+    return () => window.removeEventListener('popstate', syncFiltersFromUrl);
   }, []);
 
   function openCreateModal() {
@@ -74,14 +99,16 @@ export default function Tasks() {
     const selectedEmployeeId = Object.prototype.hasOwnProperty.call(overrides, 'employeeId') ? overrides.employeeId : (employeeFilter === 'all' ? null : employeeFilter);
     const selectedStatus = overrides.status ?? status;
     const selectedPriority = overrides.priority ?? priority;
+    const selectedDate = overrides.date ?? dateFilter;
+    const dateRange = selectedDate ? getDateFilterRange(selectedDate) : {};
     const employeeRequest = manager
       ? getTaskEmployees()
       : Promise.resolve({ data: [employee], error: null });
     const checklistRequest = selectedPriority !== 'all' && selectedPriority !== 'normal'
       ? Promise.resolve({ data: [], error: null })
-      : getChecklistItems({ limit: 500, employeeId: selectedEmployeeId || (!manager ? employee.id : null), status: selectedStatus === 'all' ? undefined : selectedStatus });
+      : getChecklistItems({ limit: 500, dueDate: selectedDate || undefined, employeeId: selectedEmployeeId || (!manager ? employee.id : null), status: selectedStatus === 'all' ? undefined : selectedStatus });
     const [taskResponse, checklistResponse, employeeResponse] = await Promise.all([
-      getTasks({ limit: 200, assigneeId: selectedEmployeeId || undefined, status: selectedStatus === 'all' ? undefined : selectedStatus, priority: selectedPriority }),
+      getTasks({ limit: 200, assigneeId: selectedEmployeeId || undefined, status: selectedStatus === 'all' ? undefined : selectedStatus, priority: selectedPriority, ...dateRange }),
       checklistRequest,
       employeeRequest,
     ]);
@@ -100,9 +127,9 @@ export default function Tasks() {
     });
     if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
     setLoading(false);
-  }, [employeeFilter, priority, status]);
+  }, [dateFilter, employeeFilter, priority, status]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (filtersReady) load(); }, [filtersReady, load]);
 
   useEffect(() => {
     if (taskData && !loading && canCreateTasks(taskData.role) && new URLSearchParams(window.location.search).get('create') === '1') openCreateModal();
@@ -120,9 +147,10 @@ export default function Tasks() {
     const searchable = [workItem.title, workItem.description, workItem.assignee?.name, workItem.category, workItem.checklistItem?.template?.frequency].filter(Boolean).join(' ').toLowerCase();
     const matchesSearch = !query || searchable.includes(query);
     const matchesEmployee = employeeFilter === 'all' || workItem.assignee_id === employeeFilter;
+    const matchesDate = !dateFilter || getWorkItemScheduledDate(workItem, getChecklistTimeZone()) === dateFilter;
     const workStatus = getWorkItemStatus(workItem);
-    return matchesSearch && matchesEmployee && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
-  }), [workItems, search, employeeFilter, status, priority]);
+    return matchesSearch && matchesEmployee && matchesDate && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
+  }), [workItems, search, employeeFilter, status, priority, dateFilter]);
 
   function updateForm(field, value) { setForm((current) => ({ ...current, [field]: value })); }
 
@@ -154,19 +182,31 @@ export default function Tasks() {
   function updateStatusFilter(nextStatus) {
     const normalizedStatus = ['pending', 'overdue', 'completed'].includes(nextStatus) ? nextStatus : 'all';
     setStatus(normalizedStatus);
-    const params = new URLSearchParams(window.location.search);
-    if (normalizedStatus === 'all') params.delete('status');
-    else params.set('status', normalizedStatus);
-    const query = params.toString();
-    window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    updateFilterUrl('status', normalizedStatus);
   }
 
   function updateEmployeeFilter(nextEmployeeId) {
     setEmployeeFilter(nextEmployeeId);
+    updateFilterUrl('employee', nextEmployeeId);
   }
 
   function updatePriorityFilter(nextPriority) {
     setPriority(nextPriority);
+    updateFilterUrl('priority', nextPriority);
+  }
+
+  function updateDateFilter(nextDate) {
+    const normalizedDate = isValidDateFilter(nextDate) ? nextDate : '';
+    setDateFilter(normalizedDate);
+    updateFilterUrl('date', normalizedDate);
+  }
+
+  function updateFilterUrl(key, value) {
+    const params = new URLSearchParams(window.location.search);
+    if (!value || value === 'all') params.delete(key);
+    else params.set(key, value);
+    const query = params.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
   }
 
   function clearFilters() {
@@ -174,8 +214,12 @@ export default function Tasks() {
     setEmployeeFilter('all');
     setPriority('all');
     setStatus('all');
+    setDateFilter('');
     const params = new URLSearchParams(window.location.search);
+    params.delete('employee');
     params.delete('status');
+    params.delete('priority');
+    params.delete('date');
     const query = params.toString();
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
   }
@@ -189,6 +233,7 @@ export default function Tasks() {
       <div className="filter-bar">
         <label className="search-box"><Icon name="search" size={17} /><input aria-label="Search tasks" placeholder="Search tasks, people, or categories" value={search} onChange={(event) => setSearch(event.target.value)} disabled={!taskData} /></label>
         <label className="filter-control"><span>Employee</span><select value={employeeFilter} onChange={(event) => updateEmployeeFilter(event.target.value)} disabled={!taskData}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label>
+        <label className="filter-control"><span>Date</span><input type="date" value={dateFilter} onChange={(event) => updateDateFilter(event.target.value)} disabled={!taskData} /></label>
         <label className="filter-control"><span>Status</span><select value={status} onChange={(event) => updateStatusFilter(event.target.value)} disabled={!taskData}><option value="all">All status</option><option value="pending">Pending</option><option value="overdue">Overdue</option><option value="completed">Completed</option></select></label>
         <label className="filter-control"><span>Priority</span><select value={priority} onChange={(event) => updatePriorityFilter(event.target.value)} disabled={!taskData}><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option></select></label>
         <button className="button button-ghost button-small filter-button" type="button" onClick={clearFilters} disabled={!taskData}><Icon name="filter" size={15} />Clear</button>
