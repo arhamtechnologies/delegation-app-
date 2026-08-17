@@ -8,7 +8,7 @@ import { EmptyState, MetricCard, PriorityBadge, StatusBadge } from '../../compon
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
 import { formatChecklistDueAt, getChecklistItems } from '../../lib/checklist-data';
 import { formatTaskDeadline, getTasks } from '../../lib/task-data';
-import { getWorkItemStatus, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
+import { getTodaysWorkItems, getWorkItemStatus, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
 
 function MetricSkeleton() {
   return <div className="metric-card metric-card-loading" aria-hidden="true"><div className="metric-card-top"><span className="metric-icon skeleton-shimmer" /></div><div className="metric-value"><span className="metric-value-placeholder skeleton-shimmer" /></div><div className="metric-label"><span className="metric-label-placeholder skeleton-shimmer" /></div></div>;
@@ -32,20 +32,6 @@ function getDashboardMetrics(workItems, now) {
     metrics[status] += 1;
     return metrics;
   }, { total: workItems.length, pending: 0, overdue: 0, completed: 0 });
-}
-
-function getPriorityWorkItems(workItems, now) {
-  const soon = now.getTime() + 48 * 60 * 60 * 1000;
-  return workItems
-    .filter((workItem) => {
-      const status = getWorkItemStatus(workItem, now);
-      if (status === 'overdue') return true;
-      const dueValue = workItem.eta || workItem.due_at;
-      const dueTime = dueValue ? new Date(dueValue).getTime() : NaN;
-      return status === 'pending' && Number.isFinite(dueTime) && dueTime >= now.getTime() && dueTime <= soon;
-    })
-    .sort((left, right) => new Date(left.eta || left.due_at || 0) - new Date(right.eta || right.due_at || 0))
-    .slice(0, 8);
 }
 
 function DashboardTaskRow({ task }) {
@@ -110,7 +96,7 @@ export default function Dashboard() {
       name: employee.name,
       role: employee.role,
       metrics: getDashboardMetrics(workItems, now),
-      priorityTasks: getPriorityWorkItems(workItems, now),
+      todayTasks: getTodaysWorkItems(workItems, now),
     });
     setLoading(false);
   }
@@ -119,7 +105,7 @@ export default function Dashboard() {
 
   const manager = Boolean(dashboardData && ['super_admin', 'assigner', 'ea'].includes(dashboardData.role));
   const metrics = dashboardData?.metrics || {};
-  const priorityTasks = dashboardData?.priorityTasks || [];
+  const todayTasks = dashboardData?.todayTasks || [];
 
   const title = dashboardData ? (manager ? 'Dashboard' : 'My Tasks') : 'Loading workspace';
   const canCreate = dashboardData ? canCreateTasks(dashboardData.role) : false;
@@ -131,8 +117,8 @@ export default function Dashboard() {
     {!dashboardData ? <><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /></> : <><MetricCard label="Total tasks" value={metrics.total} href="/tasks" /><MetricCard label="Pending" value={metrics.pending} tone="purple" href="/tasks?status=pending" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Completed" value={metrics.completed} tone="mint" href="/tasks?status=completed" /></>}
     </section>
     <section className="panel overview-panel">
-      <div className="simple-section-heading"><div><h2>{dashboardData ? (manager ? 'Tasks needing attention' : 'My Tasks') : 'Loading tasks'}</h2><p>{dashboardData ? (manager ? 'Overdue and due-soon work appears here first.' : 'Your overdue and due-soon work appears here first.') : 'Loading your latest task summary.'}</p></div><Link className="text-link" href="/tasks">View all <Icon name="arrowUpRight" size={14} /></Link></div>
-      {!dashboardData ? <div className="overview-loading-list" aria-label="Loading tasks"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div> : priorityTasks.length ? <ul className="dashboard-task-list">{priorityTasks.map((task) => <DashboardTaskRow key={task.id} task={task} />)}</ul> : <EmptyState compact icon="checkCircle" title="No priority tasks" description="You are all caught up. New urgent work will appear here." />}
+      <div className="simple-section-heading"><div><h2>{dashboardData ? "Today's tasks" : 'Loading tasks'}</h2><p>{dashboardData ? 'All tasks scheduled for today are shown here.' : 'Loading your latest task summary.'}</p></div><Link className="text-link" href="/tasks">View all <Icon name="arrowUpRight" size={14} /></Link></div>
+      {!dashboardData ? <div className="overview-loading-list" aria-label="Loading tasks"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div> : todayTasks.length ? <ul className="dashboard-task-list">{todayTasks.map((task) => <DashboardTaskRow key={`${task.kind}-${task.id}`} task={task} />)}</ul> : <EmptyState compact icon="checkCircle" title="No tasks scheduled for today." description="Everything scheduled for today will appear here." />}
     </section>
   </AppShell>;
 }
