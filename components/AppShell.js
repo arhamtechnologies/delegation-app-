@@ -155,16 +155,21 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
     if (signingOut) return;
     setSigningOut(true);
     setSignOutError('');
-    const { error } = await supabaseBrowser().auth.signOut();
-    if (error) {
+    try {
+      const { error } = await supabaseBrowser().auth.signOut({ scope: 'local' });
+      if (error) throw error;
+
+      clearAuthCache();
+      setProfile(null);
+      setUnreadCount(0);
+      setAuthState('signed_out');
+      router.replace('/login');
+      router.refresh();
+    } catch (error) {
       console.error('Unable to sign out.', { code: error.code, message: error.message });
       setSignOutError('Sign out failed. Please try again.');
       setSigningOut(false);
-      return;
     }
-    setProfile(null);
-    setUnreadCount(0);
-    setAuthState('signed_out');
   }
 
   if (authState === 'checking') return <div className="auth-loading-shell" role="status">Checking your session...</div>;
