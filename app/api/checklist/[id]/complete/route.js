@@ -22,7 +22,10 @@ export async function POST(request, { params }) {
   }
 
   const { data: { user } = {}, error: userError } = await userClient.auth.getUser(token);
-  if (userError || !user) return errorResponse('Your session is invalid or has expired.', 401);
+  if (userError || !user) {
+    console.error('Checklist completion authentication failed.', { code: userError?.code, message: userError?.message });
+    return errorResponse('Your session is invalid or has expired.', 401);
+  }
 
   const { data: employee, error: employeeError } = await userClient
     .from('employees')
