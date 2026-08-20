@@ -240,7 +240,7 @@ export default function Checklist() {
     const response = await fetch('/api/checklist/non-working-days', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) setError(payload.error || 'The non-working-day settings could not be saved.');
-    else { setMessage(payload.deactivatedCount ? `Saved and deactivated ${payload.deactivatedCount} checklist task${payload.deactivatedCount === 1 ? '' : 's'}.` : 'Non-working-day settings saved.'); await load(); }
+    else { setMessage(payload.deactivatedCount && payload.restoredCount ? `Saved, deactivated ${payload.deactivatedCount} and restored ${payload.restoredCount} checklist task${payload.restoredCount === 1 ? '' : 's'}.` : payload.deactivatedCount ? `Saved and deactivated ${payload.deactivatedCount} checklist task${payload.deactivatedCount === 1 ? '' : 's'}.` : payload.restoredCount ? `Saved and restored ${payload.restoredCount} checklist task${payload.restoredCount === 1 ? '' : 's'}.` : 'Non-working-day settings saved.'); await load(); }
     setNonWorkingDayConfigSaving(false);
   }
 
@@ -248,7 +248,7 @@ export default function Checklist() {
     const token = await getAccessToken();
     const response = await fetch('/api/checklist/non-working-days', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ reason: 'employee_leave', employee_id: group.employeeId, date: dateValue }) });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) setError(payload.error || 'The leave date could not be removed.'); else { setMessage('Non-working date removed.'); await load(); }
+    if (!response.ok) setError(payload.error || 'The leave date could not be removed.'); else { setMessage(payload.restoredCount ? `Non-working date removed. Restored ${payload.restoredCount} checklist task${payload.restoredCount === 1 ? '' : 's'}.` : 'Non-working date removed.'); await load(); }
   }
 
   async function removeConfiguredHoliday(group) {
