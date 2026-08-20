@@ -205,7 +205,7 @@ export default function Checklist() {
   const employees = useMemo(() => data?.employees || [], [data]);
   const holidays = useMemo(() => data?.holidays || [], [data]);
   const employeeLeave = useMemo(() => data?.employeeLeave || [], [data]);
-  const todayItems = useMemo(() => items.filter((item) => item.due_date === today && item.status !== 'deactivated'), [items, today]);
+  const todayItems = useMemo(() => items.filter((item) => item?.id && item.due_date === today && item.status !== 'deactivated'), [items, today]);
   const filteredTemplates = useMemo(() => templates.filter((template) => {
     const query = templateSearch.trim().toLowerCase();
     const matchesSearch = !query || [template.task, template.employee?.name, template.employee?.email].filter(Boolean).join(' ').toLowerCase().includes(query);
@@ -358,9 +358,32 @@ export default function Checklist() {
   async function completeItem(item) {
     if (completing || getChecklistStatus(item) === 'completed') return;
     setCompleting(item.id); setError('');
-    const { error: updateError } = await setChecklistCompletion(item.id);
-    if (updateError) setError(updateError.message); else { setMessage('Checklist item completed.'); await load(); }
-    setCompleting(null);
+    try {
+      const { data: updatedItem, error: updateError } = await setChecklistCompletion(item.id);
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+      const previousStatus = getChecklistStatus(item);
+      setData((current) => {
+        if (!current) return current;
+        const metrics = { ...current.metrics };
+        if (previousStatus === 'pending') metrics.pending = Math.max(0, (metrics.pending || 0) - 1);
+        if (previousStatus === 'overdue') metrics.overdue = Math.max(0, (metrics.overdue || 0) - 1);
+        if (previousStatus !== 'completed') metrics.completed = (metrics.completed || 0) + 1;
+        return {
+          ...current,
+          items: current.items.map((currentItem) => currentItem.id === item.id ? { ...currentItem, ...(updatedItem || {}), status: 'completed', completed_at: updatedItem?.completed_at || new Date().toISOString() } : currentItem),
+          metrics,
+        };
+      });
+      setMessage('Checklist item completed.');
+    } catch (completionError) {
+      console.error('Checklist item completion failed.', { message: completionError?.message });
+      setError('The checklist item could not be completed. Please try again.');
+    } finally {
+      setCompleting(null);
+    }
   }
 
   async function previewImport() {
