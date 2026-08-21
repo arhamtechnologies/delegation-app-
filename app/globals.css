@@ -145,6 +145,12 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-width: 440px) { .metric-grid, .task-summary-row { grid-template-columns: minmax(0, 1fr); }.metric-card { min-height: 115px; }.metric-value { margin-top: 12px; }.hero-strip { padding: 20px; }.page-actions .button { flex: 1 1 auto; }.section-header { display: block; }.section-header > .button { margin-top: 12px; }.detail-topline { align-items: flex-start; flex-direction: column; }.detail-metadata { grid-template-columns: minmax(0, 1fr); }.modal-actions .button { flex: 1; }.profile-preview { align-items: flex-start; flex-wrap: wrap; }.profile-preview .button { width: 100%; margin-left: 65px; }.notification-item { gap: 9px; }.notification-action { display: none; }.notification-list { padding-right: 14px; padding-left: 14px; }.notification-tabs { padding-right: 14px; padding-left: 14px; }.pulse-stats { gap: 5px; }.pulse-stats strong { font-size: 16px; } }
 @media print { .sidebar, .mobile-topbar, .page-actions, .filter-bar, .button { display: none !important; }.app-shell { display: block; height: auto; overflow: visible; }.main-content { width: 100%; height: auto; margin-left: 0; overflow: visible; }.page-container { padding: 20px; }.panel, .metric-card { box-shadow: none; } }
 .task-source-badge { display: inline-flex; align-items: center; gap: 3px; color: var(--purple-dark); font-weight: 700; }
+.task-table-heading, .task-list-desktop .task-row-grid { grid-template-columns: minmax(180px, 1.5fr) minmax(110px, .85fr) minmax(80px, .75fr) minmax(90px, .95fr) minmax(70px, .85fr) minmax(84px, .75fr); }
+.task-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; }
+.row-action-delete { padding: 2px; border: 0; background: transparent; cursor: pointer; }
+.row-action-delete:hover, .row-action-delete:focus-visible { color: var(--red); outline: none; }
+.mobile-task-card-footer .button { flex: 0 0 auto; }
+@media (max-width: 1180px) { .task-table-heading, .task-list-desktop .task-row-grid { grid-template-columns: minmax(170px, 1.4fr) minmax(100px, .8fr) 80px 90px 75px minmax(84px, .75fr); } }
 .task-check-button { padding: 0; border: 0; cursor: pointer; }
 .task-check-button:disabled { cursor: wait; opacity: .6; }
 .checklist-days > span { display: inline-flex; flex-direction: column; gap: 2px; }
