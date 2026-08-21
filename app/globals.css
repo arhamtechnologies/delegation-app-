@@ -182,6 +182,11 @@ h1, h2, h3, p { margin-top: 0; }
 .checklist-employee-id strong, .checklist-employee-name { overflow: hidden; color: var(--ink-strong); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .checklist-employee-id small { margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .checklist-task-name { overflow: hidden; color: var(--ink-strong); font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.task-tooltip-trigger { min-width: 0; }
+.task-tooltip-trigger:focus-visible { outline: 2px solid rgba(103, 92, 246, .35); outline-offset: 3px; border-radius: 3px; }
+.task-title-tooltip { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.task-tooltip { position: fixed; z-index: 1000; width: max-content; padding: 9px 11px; border: 1px solid #343c52; border-radius: 9px; background: var(--ink-strong); box-shadow: 0 12px 30px rgba(13, 21, 38, .2); color: #fff; font-size: 11px; font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; pointer-events: none; white-space: normal; }
+.task-tooltip-above { transform: translateY(-100%); }
 .checklist-days { display: inline-flex; align-items: center; gap: 5px; color: var(--muted-strong); font-size: 10px; white-space: nowrap; }
 .checklist-actions { position: relative; justify-self: end; }
 .checklist-actions summary { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; color: var(--muted); cursor: pointer; list-style: none; }
