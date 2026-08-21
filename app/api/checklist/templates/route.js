@@ -4,6 +4,7 @@ import { createServerNotifications, notificationFingerprint } from '../../../../
 export const runtime = 'nodejs';
 
 const frequencyValues = new Set(['daily', 'weekly', 'every_15_days', 'monthly']);
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function validDate(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value); }
 function validTime(value) { return typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value); }
@@ -97,4 +98,68 @@ export async function PATCH(request) {
   } catch (error) {
     return checklistApiError(error.message || 'The checklist template could not be updated.', 400);
   }
+}
+
+export async function DELETE(request) {
+  const authorization = await authorizeChecklistManager(request);
+  if (authorization.response) return authorization.response;
+  let payload;
+  try { payload = await request.json(); } catch { return checklistApiError('The checklist deletion request could not be read.', 400); }
+  if (!uuidPattern.test(payload?.id || '')) return checklistApiError('A valid checklist template is required.', 400);
+
+  const { data: template, error: templateError } = await authorization.admin
+    .from('checklist_templates')
+    .select('id,employee_id,task,active')
+    .eq('id', payload.id)
+    .maybeSingle();
+  if (templateError) {
+    console.error('Checklist template lookup before deletion failed.', { code: templateError.code, message: templateError.message });
+    return checklistApiError('The checklist template could not be loaded.', 500);
+  }
+  if (!template) return checklistApiError('The checklist template was not found.', 404);
+
+  const { count: generatedItemCount, error: generatedItemCountError } = await authorization.admin
+    .from('checklist_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('template_id', template.id);
+  if (generatedItemCountError) {
+    console.error('Generated checklist item count before deletion failed.', { code: generatedItemCountError.code, message: generatedItemCountError.message });
+    return checklistApiError('The generated checklist items could not be checked before deletion.', 500);
+  }
+
+  const { error: generatedItemDeleteError } = await authorization.admin
+    .from('checklist_items')
+    .delete()
+    .eq('template_id', template.id);
+  if (generatedItemDeleteError) {
+    console.error('Generated checklist item deletion failed.', { code: generatedItemDeleteError.code, message: generatedItemDeleteError.message, templateId: template.id });
+    return checklistApiError('The checklist task could not be deleted because its generated items could not be removed.', 409);
+  }
+
+  const { data: deletedTemplate, error: templateDeleteError } = await authorization.admin
+    .from('checklist_templates')
+    .delete()
+    .eq('id', template.id)
+    .select('id')
+    .maybeSingle();
+  if (templateDeleteError) {
+    console.error('Checklist template deletion failed.', { code: templateDeleteError.code, message: templateDeleteError.message, templateId: template.id });
+    return checklistApiError('The checklist task could not be deleted.', 409);
+  }
+  if (!deletedTemplate) return checklistApiError('Checklist deletion did not affect the requested task.', 404);
+
+  if (template.active && template.employee_id !== authorization.employee.id) {
+    await createServerNotifications(authorization.admin, [{
+      recipient_employee_id: template.employee_id,
+      actor_employee_id: authorization.employee.id,
+      kind: 'checklist_deleted',
+      title: 'Checklist task deleted',
+      body: `Checklist task '${template.task}' was permanently deleted.`,
+      entity_type: 'checklist_template',
+      entity_id: template.id,
+      dedupe_key: `checklist_deleted:${template.id}:${template.employee_id}`,
+    }]);
+  }
+
+  return Response.json({ success: true, deleted: true, generatedItemsDeleted: generatedItemCount || 0 });
 }

@@ -12,10 +12,25 @@ export async function POST(request) {
   if (!ids.length) return checklistApiError('Select at least one checklist template.', 400);
   const { data: templates, error: loadError } = await authorization.admin.from('checklist_templates').select('id,employee_id,task,active').in('id', ids);
   if (loadError || (templates || []).length !== ids.length) return checklistApiError('One or more selected checklist templates were not found.', 404);
-  const { data: updated, error } = await authorization.admin.from('checklist_templates').update({ active: false }).in('id', ids).select('id');
-  if (error || updated?.length !== ids.length) {
+  const { count: generatedItemCount, error: generatedItemCountError } = await authorization.admin
+    .from('checklist_items')
+    .select('id', { count: 'exact', head: true })
+    .in('template_id', ids);
+  if (generatedItemCountError) {
+    console.error('Generated checklist item count before bulk deletion failed.', { code: generatedItemCountError.code, message: generatedItemCountError.message });
+    return checklistApiError('The generated checklist items could not be checked before deletion.', 500);
+  }
+
+  const { error: generatedItemDeleteError } = await authorization.admin.from('checklist_items').delete().in('template_id', ids);
+  if (generatedItemDeleteError) {
+    console.error('Generated checklist bulk deletion failed.', { code: generatedItemDeleteError.code, message: generatedItemDeleteError.message });
+    return checklistApiError('The selected checklist tasks could not be deleted because their generated items could not be removed.', 409);
+  }
+
+  const { data: deleted, error } = await authorization.admin.from('checklist_templates').delete().in('id', ids).select('id');
+  if (error || deleted?.length !== ids.length) {
     console.error('Checklist bulk delete failed.', { code: error?.code, message: error?.message });
-    return checklistApiError('The selected checklist templates could not be deactivated.', 500);
+    return checklistApiError('The selected checklist templates could not be deleted.', 500);
   }
   const grouped = new Map();
   (templates || []).filter((template) => template.active).forEach((template) => {
@@ -28,12 +43,12 @@ export async function POST(request) {
     .map(([employeeId, employeeTemplates]) => ({
       recipient_employee_id: employeeId,
       actor_employee_id: authorization.employee.id,
-      kind: 'checklist_deactivated',
-      title: 'Checklist tasks deactivated',
-      body: `${employeeTemplates.length} checklist task${employeeTemplates.length === 1 ? '' : 's'} ${employeeTemplates.length === 1 ? 'was' : 'were'} deactivated.`,
+      kind: 'checklist_deleted',
+      title: 'Checklist tasks deleted',
+      body: `${employeeTemplates.length} checklist task${employeeTemplates.length === 1 ? '' : 's'} ${employeeTemplates.length === 1 ? 'was' : 'were'} permanently deleted.`,
       entity_type: 'checklist_template',
       entity_id: employeeTemplates[0].id,
-      dedupe_key: `checklist_bulk_deactivated:${notificationFingerprint([...ids].sort())}:${employeeId}`,
+      dedupe_key: `checklist_bulk_deleted:${notificationFingerprint([...ids].sort())}:${employeeId}`,
     })));
-  return Response.json({ success: true, deleted: updated.length, historyPreserved: true });
+  return Response.json({ success: true, deleted: deleted.length, generatedItemsDeleted: generatedItemCount || 0 });
 }
