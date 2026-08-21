@@ -3,6 +3,7 @@ import { createSupabaseAdminClient, createSupabaseUserClient, getBearerToken } f
 const managerRoles = new Set(['super_admin', 'assigner', 'ea']);
 const employeeRoles = new Set(['super_admin', 'assigner', 'ea', 'doer']);
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function errorResponse(message, status) {
   return Response.json({ error: message }, { status });
@@ -113,4 +114,105 @@ export async function POST(request) {
   }
 
   return Response.json({ employee }, { status: 201 });
+}
+
+export async function DELETE(request) {
+  const accessToken = getBearerToken(request);
+  if (!accessToken) return errorResponse('You must be signed in to delete an employee.', 401);
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return errorResponse('A valid employee deletion request is required.', 400);
+  }
+
+  const employeeId = typeof payload?.employee_id === 'string' ? payload.employee_id.trim() : '';
+  if (!uuidPattern.test(employeeId)) return errorResponse('A valid employee is required.', 400);
+
+  let userClient;
+  let adminClient;
+  try {
+    userClient = createSupabaseUserClient(accessToken);
+    adminClient = createSupabaseAdminClient();
+  } catch {
+    return errorResponse('Employee deletion is not configured on the server.', 503);
+  }
+
+  const { data: { user } = {}, error: userError } = await userClient.auth.getUser(accessToken);
+  if (userError || !user) return errorResponse('Your session is invalid or has expired. Please sign in again.', 401);
+
+  const { data: requester, error: requesterError } = await adminClient
+    .from('employees')
+    .select('id,role')
+    .eq('auth_user_id', user.id)
+    .maybeSingle();
+  if (requesterError) return errorResponse('Your employee permissions could not be verified.', 500);
+  if (!requester || !managerRoles.has(requester.role)) return errorResponse('Only authorized workspace managers can delete employees.', 403);
+  if (requester.id === employeeId) return errorResponse('You cannot delete your own employee account.', 409);
+
+  const { data: targetEmployee, error: targetError } = await adminClient
+    .from('employees')
+    .select('id,name,role,auth_user_id')
+    .eq('id', employeeId)
+    .maybeSingle();
+  if (targetError) return errorResponse('Unable to load the employee.', 500);
+  if (!targetEmployee) return errorResponse('Employee not found.', 404);
+
+  if (targetEmployee.role === 'super_admin') {
+    const { count, error: superAdminCountError } = await adminClient
+      .from('employees')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'super_admin');
+    if (superAdminCountError) return errorResponse('Unable to verify Super Admin protection.', 500);
+    if ((count || 0) <= 1) return errorResponse('The last Super Admin cannot be deleted.', 409);
+  }
+
+  const transferOperations = [
+    ['assigned tasks', () => adminClient.from('tasks').update({ assignee_id: requester.id }).eq('assignee_id', employeeId)],
+    ['followed tasks', () => adminClient.from('tasks').update({ follower_ea_id: requester.id }).eq('follower_ea_id', employeeId)],
+    ['checklist templates', () => adminClient.from('checklist_templates').update({ employee_id: requester.id }).eq('employee_id', employeeId)],
+    ['generated checklist items', () => adminClient.from('checklist_items').update({ employee_id: requester.id }).eq('employee_id', employeeId)],
+    ['checklist audit records', () => adminClient.from('checklist_non_working_day_operations').update({ performed_by: requester.id }).eq('performed_by', employeeId)],
+  ];
+  if (targetEmployee.auth_user_id) {
+    transferOperations.push(
+      ['tasks created by this login', () => adminClient.from('tasks').update({ created_by: user.id }).eq('created_by', targetEmployee.auth_user_id)],
+      ['task updates authored by this login', () => adminClient.from('task_updates').update({ author_user_id: user.id }).eq('author_user_id', targetEmployee.auth_user_id)],
+      ['checklist templates created by this login', () => adminClient.from('checklist_templates').update({ created_by: user.id }).eq('created_by', targetEmployee.auth_user_id)],
+      ['checklist items completed by this login', () => adminClient.from('checklist_items').update({ completed_by: user.id }).eq('completed_by', targetEmployee.auth_user_id)],
+      ['leave records created by this login', () => adminClient.from('employee_leave_periods').update({ created_by: user.id }).eq('created_by', targetEmployee.auth_user_id)],
+      ['non-working dates created by this login', () => adminClient.from('employee_non_working_days').update({ created_by: user.id }).eq('created_by', targetEmployee.auth_user_id)],
+    );
+  }
+
+  for (const [label, operation] of transferOperations) {
+    const { error: transferError } = await operation();
+    if (transferError) {
+      console.error(`Unable to transfer ${label} before employee deletion.`, { code: transferError.code, message: transferError.message, employeeId });
+      return errorResponse(`The employee could not be deleted because related ${label} could not be transferred.`, 409);
+    }
+  }
+
+  const { data: deletedEmployee, error: deleteError } = await adminClient
+    .from('employees')
+    .delete()
+    .eq('id', employeeId)
+    .select('id')
+    .maybeSingle();
+  if (deleteError) {
+    console.error('Unable to delete employee record.', { code: deleteError.code, message: deleteError.message, employeeId });
+    return errorResponse('The employee could not be deleted. Related records may still reference this employee.', 409);
+  }
+  if (!deletedEmployee) return errorResponse('Employee deletion did not affect the requested employee.', 404);
+
+  if (targetEmployee.auth_user_id) {
+    const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(targetEmployee.auth_user_id);
+    if (authDeleteError) {
+      console.error('Employee was deleted but the linked Auth user could not be removed.', { code: authDeleteError.code, message: authDeleteError.message, authUserId: targetEmployee.auth_user_id, employeeId });
+      return errorResponse('The employee was deleted, but the linked login cleanup failed. Contact an administrator.', 500);
+    }
+  }
+
+  return Response.json({ success: true, employee_id: employeeId });
 }
