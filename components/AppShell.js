@@ -12,6 +12,7 @@ const managerNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid', section: 'Workspace' },
   { href: '/tasks', label: 'Tasks', icon: 'clipboard', section: 'Workspace' },
   { href: '/checklist', label: 'Checklist', icon: 'checkSquare', section: 'Workspace' },
+  { href: '/calendar', label: 'Calendar', icon: 'calendar', section: 'Manage', roles: ['super_admin', 'ea'] },
   { href: '/employees', label: 'Employees', icon: 'users', section: 'Manage' },
   { href: '/mis', label: 'MIS', icon: 'chart', section: 'Manage' },
 ];
@@ -147,8 +148,10 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
 
   useEffect(() => {
     const manager = ['super_admin', 'assigner', 'ea'].includes(profile?.role);
-    const managerRoute = pathname === '/employees' || pathname.startsWith('/employees/') || pathname === '/mis' || pathname.startsWith('/mis/');
-    if (authState === 'authenticated' && profile && !manager && managerRoute) router.replace('/tasks');
+    const managerRoute = pathname === '/employees' || pathname.startsWith('/employees/') || pathname === '/mis' || pathname.startsWith('/mis/') || pathname === '/calendar' || pathname.startsWith('/calendar/');
+    const calendarRoute = pathname === '/calendar' || pathname.startsWith('/calendar/');
+    const canManageCalendar = ['super_admin', 'ea'].includes(profile?.role);
+    if (authState === 'authenticated' && profile && ((!manager && managerRoute) || (calendarRoute && !canManageCalendar))) router.replace(calendarRoute ? '/checklist' : '/tasks');
   }, [authState, pathname, profile, router]);
 
   async function logout() {
@@ -177,9 +180,12 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
   if (authState === 'signed_out') return <div className="auth-loading-shell" role="status">Signing you out...</div>;
 
   const isManager = ['super_admin', 'assigner', 'ea'].includes(profile?.role);
-  const managerRoute = pathname === '/employees' || pathname.startsWith('/employees/') || pathname === '/mis' || pathname.startsWith('/mis/');
+  const managerRoute = pathname === '/employees' || pathname.startsWith('/employees/') || pathname === '/mis' || pathname.startsWith('/mis/') || pathname === '/calendar' || pathname.startsWith('/calendar/');
+  const calendarRoute = pathname === '/calendar' || pathname.startsWith('/calendar/');
+  const canManageCalendar = ['super_admin', 'ea'].includes(profile?.role);
   if (managerRoute && !isManager) return <div className="auth-loading-shell" role="status">Redirecting to your tasks...</div>;
-  const visibleItems = isManager ? managerNavItems : doerNavItems;
+  if (calendarRoute && !canManageCalendar) return <div className="auth-loading-shell" role="status">Redirecting to your checklist...</div>;
+  const visibleItems = (isManager ? managerNavItems : doerNavItems).filter((item) => !item.roles || item.roles.includes(profile?.role));
   const sections = [...new Set(visibleItems.map((item) => item.section))];
 
   return <div className="app-shell">
