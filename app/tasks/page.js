@@ -34,10 +34,6 @@ function getDateFilterRange(dateValue) {
   };
 }
 
-function TaskSummarySkeleton() {
-  return <div className="inline-stat inline-stat-loading" aria-hidden="true"><span className="inline-stat-icon skeleton-shimmer" /><div><span className="summary-value-placeholder skeleton-shimmer" /><span className="summary-label-placeholder skeleton-shimmer" /></div></div>;
-}
-
 function getWorkDeadline(workItem) {
   return workItem.kind === 'checklist' ? formatChecklistDueAt(workItem.due_at) : formatTaskDeadline(workItem);
 }
@@ -241,7 +237,7 @@ export default function Tasks() {
   }
 
   return <AppShell title={taskData ? 'Tasks' : 'Loading tasks'} eyebrow="Workspace / Tasks" description="Create, prioritize, and keep every assignment moving." actions={canCreate ? <button className="button button-primary" type="button" onClick={openCreateModal}><Icon name="plus" size={17} />Create task</button> : null}>
-    {!taskData ? <section className="task-summary-row"><TaskSummarySkeleton /><TaskSummarySkeleton /><TaskSummarySkeleton /><TaskSummarySkeleton /></section> : <section className="task-summary-row"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="clipboard" size={16} /></span><div><strong>{workItems.length}</strong><span>Total tasks</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'overdue').length}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="clock" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'pending').length}</strong><span>Pending</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'completed').length}</strong><span>Completed</span></div></div></section>}
+    {taskData && !canCreate && <section className="task-summary-row"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="clipboard" size={16} /></span><div><strong>{workItems.length}</strong><span>Total tasks</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'overdue').length}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="clock" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'pending').length}</strong><span>Pending</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'completed').length}</strong><span>Completed</span></div></div></section>}
     {message && <div className="inline-alert success"><Icon name="checkCircle" size={16} />{message}</div>}
     {error && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
     <section className="panel task-panel">
