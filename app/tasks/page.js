@@ -48,6 +48,7 @@ export default function Tasks() {
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('all');
+  const [workType, setWorkType] = useState('all');
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
@@ -65,7 +66,9 @@ export default function Tasks() {
       const statusValue = params.get('status');
       const priorityValue = params.get('priority');
       const dateValue = params.get('date');
+      const workTypeValue = params.get('workType');
       setEmployeeFilter(params.get('employee') || 'all');
+      setWorkType(['task', 'checklist'].includes(workTypeValue) ? workTypeValue : 'all');
       setStatus(['pending', 'overdue', 'completed'].includes(statusValue) ? statusValue : 'all');
       setPriority(['critical', 'high', 'normal'].includes(priorityValue) ? priorityValue : 'all');
       setDateFilter(isValidDateFilter(dateValue) ? dateValue : '');
@@ -98,15 +101,19 @@ export default function Tasks() {
     const selectedStatus = overrides.status ?? status;
     const selectedPriority = overrides.priority ?? priority;
     const selectedDate = overrides.date ?? dateFilter;
+    const selectedWorkType = overrides.workType ?? workType;
     const dateRange = selectedDate ? getDateFilterRange(selectedDate) : {};
     const employeeRequest = manager
       ? getTaskEmployees()
       : Promise.resolve({ data: [employee], error: null });
-    const checklistRequest = selectedPriority !== 'all' && selectedPriority !== 'normal'
+    const taskRequest = selectedWorkType === 'checklist'
+      ? Promise.resolve({ data: [], error: null })
+      : getTasks({ limit: 200, assigneeId: selectedEmployeeId || undefined, status: selectedStatus === 'all' ? undefined : selectedStatus, priority: selectedPriority, ...dateRange });
+    const checklistRequest = selectedWorkType === 'task' || (selectedPriority !== 'all' && selectedPriority !== 'normal')
       ? Promise.resolve({ data: [], error: null })
       : getChecklistItems({ limit: 500, dueDate: selectedDate || undefined, employeeId: selectedEmployeeId || (!manager ? employee.id : null), status: selectedStatus === 'all' ? undefined : selectedStatus });
     const [taskResponse, checklistResponse, employeeResponse] = await Promise.all([
-      getTasks({ limit: 200, assigneeId: selectedEmployeeId || undefined, status: selectedStatus === 'all' ? undefined : selectedStatus, priority: selectedPriority, ...dateRange }),
+      taskRequest,
       checklistRequest,
       employeeRequest,
     ]);
@@ -125,7 +132,7 @@ export default function Tasks() {
     });
     if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
     setLoading(false);
-  }, [dateFilter, employeeFilter, priority, status]);
+  }, [dateFilter, employeeFilter, priority, status, workType]);
 
   useEffect(() => { if (filtersReady) load(); }, [filtersReady, load]);
 
@@ -145,10 +152,11 @@ export default function Tasks() {
     const searchable = [workItem.title, workItem.description, workItem.assignee?.name, workItem.category, workItem.checklistItem?.template?.frequency].filter(Boolean).join(' ').toLowerCase();
     const matchesSearch = !query || searchable.includes(query);
     const matchesEmployee = employeeFilter === 'all' || workItem.assignee_id === employeeFilter;
+    const matchesWorkType = workType === 'all' || (workType === 'checklist' ? workItem.kind === 'checklist' : workItem.kind !== 'checklist');
     const matchesDate = !dateFilter || getWorkItemScheduledDate(workItem, getChecklistTimeZone()) === dateFilter;
     const workStatus = getWorkItemStatus(workItem);
-    return matchesSearch && matchesEmployee && matchesDate && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
-  }), [workItems, search, employeeFilter, status, priority, dateFilter]);
+    return matchesSearch && matchesEmployee && matchesWorkType && matchesDate && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
+  }), [workItems, search, employeeFilter, workType, status, priority, dateFilter]);
 
   function updateForm(field, value) { setForm((current) => ({ ...current, [field]: value })); }
 
@@ -202,6 +210,12 @@ export default function Tasks() {
     updateFilterUrl('employee', nextEmployeeId);
   }
 
+  function updateWorkType(nextWorkType) {
+    const normalizedWorkType = ['task', 'checklist'].includes(nextWorkType) ? nextWorkType : 'all';
+    setWorkType(normalizedWorkType);
+    updateFilterUrl('workType', normalizedWorkType);
+  }
+
   function updatePriorityFilter(nextPriority) {
     setPriority(nextPriority);
     updateFilterUrl('priority', nextPriority);
@@ -224,11 +238,13 @@ export default function Tasks() {
   function clearFilters() {
     setSearch('');
     setEmployeeFilter('all');
+    setWorkType('all');
     setPriority('all');
     setStatus('all');
     setDateFilter('');
     const params = new URLSearchParams(window.location.search);
     params.delete('employee');
+    params.delete('workType');
     params.delete('status');
     params.delete('priority');
     params.delete('date');
@@ -245,6 +261,7 @@ export default function Tasks() {
       <div className="filter-bar">
         {canCreate && <label className="search-box"><Icon name="search" size={17} /><input aria-label="Search tasks" placeholder="Search tasks, people, or categories" value={search} onChange={(event) => setSearch(event.target.value)} disabled={!taskData} /></label>}
         {canCreate && <label className="filter-control"><span>Employee</span><select value={employeeFilter} onChange={(event) => updateEmployeeFilter(event.target.value)} disabled={!taskData}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label>}
+        <label className="filter-control"><span>Work type</span><select value={workType} onChange={(event) => updateWorkType(event.target.value)} disabled={!taskData}><option value="all">All work</option><option value="task">Tasks</option><option value="checklist">Checklist</option></select></label>
         <label className="filter-control"><span>Date</span><input type="date" value={dateFilter} onChange={(event) => updateDateFilter(event.target.value)} disabled={!taskData} /></label>
         <label className="filter-control"><span>Status</span><select value={status} onChange={(event) => updateStatusFilter(event.target.value)} disabled={!taskData}><option value="all">All status</option><option value="pending">Pending</option><option value="overdue">Overdue</option><option value="completed">Completed</option></select></label>
         <label className="filter-control"><span>Priority</span><select value={priority} onChange={(event) => updatePriorityFilter(event.target.value)} disabled={!taskData}><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option></select></label>
