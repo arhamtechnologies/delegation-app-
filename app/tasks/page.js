@@ -10,7 +10,7 @@ import { canCreateTasks, getAccessToken, getCurrentEmployee } from '../../lib/au
 import { canCompleteChecklist, formatChecklistDueAt, getChecklistItems, getChecklistTimeZone, setChecklistCompletion } from '../../lib/checklist-data';
 import { getNextBusinessDate, localDateTimeToIso } from '../../lib/checklist-time';
 import { createTask, formatTaskDeadline, getTaskEmployees, getTasks } from '../../lib/task-data';
-import { getWorkItemScheduledDate, getWorkItemStatus, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
+import { getWorkItemScheduledDate, getWorkItemStatus, sortWorkItemsChronologically, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
 
 const emptyForm = { title: '', description: '', assignee_id: '', eta: '', due_time: '', start_date: '', priority: 'normal', category: 'General', instructions: '', proof_required: true, completion_notes: null, attachments: [] };
 
@@ -143,11 +143,11 @@ export default function Tasks() {
   const workItems = useMemo(() => [
     ...(taskData?.tasks || []),
     ...(taskData?.checklistItems || []),
-  ].sort((left, right) => new Date(right.eta || right.due_at || 0).getTime() - new Date(left.eta || left.due_at || 0).getTime()), [taskData]);
+  ], [taskData]);
   const employees = useMemo(() => taskData?.employees || [], [taskData]);
   const canCreate = Boolean(taskData && canCreateTasks(taskData.role));
 
-  const filteredTasks = useMemo(() => workItems.filter((workItem) => {
+  const filteredTasks = useMemo(() => sortWorkItemsChronologically(workItems.filter((workItem) => {
     const query = search.trim().toLowerCase();
     const searchable = [workItem.title, workItem.description, workItem.assignee?.name, workItem.category, workItem.checklistItem?.template?.frequency].filter(Boolean).join(' ').toLowerCase();
     const matchesSearch = !query || searchable.includes(query);
@@ -156,7 +156,7 @@ export default function Tasks() {
     const matchesDate = !dateFilter || getWorkItemScheduledDate(workItem, getChecklistTimeZone()) === dateFilter;
     const workStatus = getWorkItemStatus(workItem);
     return matchesSearch && matchesEmployee && matchesWorkType && matchesDate && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
-  }), [workItems, search, employeeFilter, workType, status, priority, dateFilter]);
+  })), [workItems, search, employeeFilter, workType, status, priority, dateFilter]);
 
   function updateForm(field, value) { setForm((current) => ({ ...current, [field]: value })); }
 

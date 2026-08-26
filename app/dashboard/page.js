@@ -8,7 +8,7 @@ import { EmptyState, MetricCard, PriorityBadge, StatusBadge } from '../../compon
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
 import { formatChecklistDueAt, getChecklistDashboardData } from '../../lib/checklist-data';
 import { formatTaskDeadline, getTaskDashboardData, getTaskEmployees } from '../../lib/task-data';
-import { getTodaysWorkItems, getWorkItemStatus, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
+import { getTodaysWorkItems, getWorkItemStatus, sortWorkItemsChronologically, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
 
 function MetricSkeleton() {
   return <div className="metric-card metric-card-loading" aria-hidden="true"><div className="metric-card-top"><span className="metric-icon skeleton-shimmer" /></div><div className="metric-value"><span className="metric-value-placeholder skeleton-shimmer" /></div><div className="metric-label"><span className="metric-label-placeholder skeleton-shimmer" /></div></div>;
@@ -118,13 +118,13 @@ export default function Dashboard() {
 
   const filteredTodayTasks = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return todayTasks.filter((task) => {
+    return sortWorkItemsChronologically(todayTasks.filter((task) => {
       const searchable = [task.title, task.description, task.assignee?.name, task.assignee?.email, task.category].filter(Boolean).join(' ').toLowerCase();
       const matchesSearch = !query || searchable.includes(query);
       const matchesEmployee = employeeFilter === 'all' || task.assignee_id === employeeFilter;
       const taskStatus = getWorkItemStatus(task);
       return matchesSearch && matchesEmployee && (statusFilter === 'all' || taskStatus === statusFilter);
-    });
+    }));
   }, [employeeFilter, search, statusFilter, todayTasks]);
 
   const dashboardFiltersActive = Boolean(search.trim() || employeeFilter !== 'all' || statusFilter !== 'all');
