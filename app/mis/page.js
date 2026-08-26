@@ -9,7 +9,7 @@ import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
 import { formatChecklistDueAt, getChecklistTimeZone } from '../../lib/checklist-data';
 import { getNextBusinessDate, localDateTimeToIso } from '../../lib/checklist-time';
 import { getTaskAssignees } from '../../lib/task-data';
-import { buildWorkEmployeePerformanceRows, getOverallWorkItems, getWorkItemScheduledDate, getWorkItemStatus, isWorkItemCompletedOnTime, sortWorkItemsChronologically } from '../../lib/work-data';
+import { buildWorkEmployeePerformanceRows, getOverallWorkItems, getWorkItemScheduledDate, getWorkItemStatus, isWorkItemCompletedOnTime } from '../../lib/work-data';
 
 const MIS_LIMIT = 1000;
 const reportStatuses = [
@@ -163,7 +163,7 @@ export default function MIS() {
   const baseFilteredWorkItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     const timeZone = getChecklistTimeZone();
-    return sortWorkItemsChronologically(workItems.filter((workItem) => {
+    return workItems.filter((workItem) => {
       const itemStatus = getWorkItemStatus(workItem);
       const itemType = workItem.kind === 'checklist' ? 'checklist' : 'task';
       const scheduledDate = getWorkItemScheduledDate(workItem, timeZone);
@@ -173,7 +173,7 @@ export default function MIS() {
       const matchesFrom = !from || scheduledDate >= from;
       const matchesTo = !to || scheduledDate <= to;
       return matchesSearch && matchesType && matchesStatus && matchesFrom && matchesTo && itemStatus !== 'deactivated';
-    }));
+    });
   }, [from, search, status, to, workItems, workType]);
 
   const filteredWorkItems = useMemo(() => {
@@ -185,7 +185,7 @@ export default function MIS() {
     if (employeeFilter === 'all') return [];
     const query = search.trim().toLowerCase();
     const timeZone = getChecklistTimeZone();
-    return sortWorkItemsChronologically(detailWorkItems.filter((workItem) => {
+    return detailWorkItems.filter((workItem) => {
       const itemStatus = getWorkItemStatus(workItem);
       const itemType = workItem.kind === 'checklist' ? 'checklist' : 'task';
       const scheduledDate = getWorkItemScheduledDate(workItem, timeZone);
@@ -196,7 +196,7 @@ export default function MIS() {
       const matchesFrom = !from || scheduledDate >= from;
       const matchesTo = !to || scheduledDate <= to;
       return matchesSearch && matchesEmployee && matchesType && matchesStatus && matchesFrom && matchesTo && itemStatus !== 'deactivated';
-    }));
+    });
   }, [detailWorkItems, employeeFilter, from, search, status, to, workType]);
 
   const employeeRows = useMemo(() => buildWorkEmployeePerformanceRows(employees, baseFilteredWorkItems).filter((row) => row.total_work > 0), [baseFilteredWorkItems, employees]);
