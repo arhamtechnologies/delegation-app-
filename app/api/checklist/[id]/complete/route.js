@@ -11,6 +11,10 @@ export async function POST(request, { params }) {
   const itemId = (await params)?.id;
   if (!itemId) return errorResponse('A checklist item is required.', 400);
 
+  let payload = {};
+  try { payload = await request.json(); } catch {}
+  const reopening = payload?.completed === false;
+
   const token = getBearerToken(request);
   if (!token) return errorResponse('Your session is invalid or has expired.', 401);
 
@@ -47,7 +51,7 @@ export async function POST(request, { params }) {
 
   const { data: item, error: itemError } = await admin
     .from('checklist_items')
-    .select('id,employee_id,status')
+    .select('id,employee_id,status,due_at')
     .eq('id', itemId)
     .maybeSingle();
   if (itemError) {
@@ -59,6 +63,26 @@ export async function POST(request, { params }) {
   const canCompleteAny = anyEmployeeRoles.has(employee.role);
   const canCompleteOwn = ownEmployeeRoles.has(employee.role) && employee.id === item.employee_id;
   if (!canCompleteAny && !canCompleteOwn) return errorResponse('You do not have permission to complete this checklist item.', 403);
+
+  if (reopening) {
+    if (item.status !== 'completed') return Response.json({ success: true, alreadyReopened: true, item });
+    const dueAt = item.due_at ? new Date(item.due_at) : null;
+    const nextStatus = dueAt && !Number.isNaN(dueAt.getTime()) && dueAt.getTime() < Date.now() ? 'overdue' : 'pending';
+    const { data: reopenedItems, error: reopenError } = await admin
+      .from('checklist_items')
+      .update({ status: nextStatus, completed_at: null, completed_by: null })
+      .eq('id', itemId)
+      .eq('status', 'completed')
+      .select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by');
+    if (reopenError) {
+      console.error('Checklist reopen update failed.', { code: reopenError.code, message: reopenError.message });
+      return errorResponse('The checklist item could not be reopened.', 500);
+    }
+    if (reopenedItems?.length === 1) return Response.json({ success: true, alreadyReopened: false, item: reopenedItems[0] });
+    const { data: currentItem } = await admin.from('checklist_items').select('id,employee_id,status').eq('id', itemId).maybeSingle();
+    if (currentItem?.status !== 'completed') return Response.json({ success: true, alreadyReopened: true, item: currentItem });
+    return errorResponse('The checklist item could not be reopened.', 409);
+  }
 
   if (item.status === 'completed') {
     return Response.json({ success: true, alreadyCompleted: true, item });

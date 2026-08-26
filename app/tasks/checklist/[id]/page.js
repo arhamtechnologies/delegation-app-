@@ -5,9 +5,9 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import AppShell from '../../../../components/AppShell';
 import { Icon } from '../../../../components/Icons';
-import { EmptyState, SectionHeader, StatusBadge } from '../../../../components/UI';
+import { EmptyState, SectionHeader, StatusBadge, formatDateTime } from '../../../../components/UI';
 import { getCurrentEmployee } from '../../../../lib/auth';
-import { canCompleteChecklist, checklistFrequencies, formatChecklistDueAt, getChecklistStatus, setChecklistCompletion } from '../../../../lib/checklist-data';
+import { addChecklistItemUpdate, canCompleteChecklist, checklistFrequencies, formatChecklistDueAt, getChecklistItemUpdates, getChecklistStatus, setChecklistCompletion } from '../../../../lib/checklist-data';
 import { supabaseBrowser } from '../../../../lib/supabase-browser';
 
 function frequencyLabel(value) {
@@ -18,6 +18,8 @@ export default function ChecklistTaskDetail() {
   const { id } = useParams();
   const [item, setItem] = useState(null);
   const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [updates, setUpdates] = useState([]);
+  const [remark, setRemark] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -28,26 +30,49 @@ export default function ChecklistTaskDetail() {
     setError('');
     const { user, employee } = await getCurrentEmployee();
     if (!user || !employee) { setLoading(false); return; }
-    const { data, error: itemError } = await supabaseBrowser()
-      .from('checklist_items')
-      .select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by,employee:employees!checklist_items_employee_id_fkey(id,name,email),template:checklist_templates!checklist_items_template_id_fkey(frequency,weekday,day_of_month,monthly_days,start_date,due_time)')
-      .eq('id', id)
-      .maybeSingle();
+    const [{ data, error: itemError }, { data: updateRows = [], error: updatesError } = {}] = await Promise.all([
+      supabaseBrowser()
+        .from('checklist_items')
+        .select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by,employee:employees!checklist_items_employee_id_fkey(id,name,email),template:checklist_templates!checklist_items_template_id_fkey(frequency,weekday,day_of_month,monthly_days,start_date,due_time)')
+        .eq('id', id)
+        .maybeSingle(),
+      getChecklistItemUpdates(id),
+    ]);
     if (itemError) setError(itemError.message);
+    if (updatesError) setError(updatesError.message);
     setItem(data || null);
+    setUpdates(updateRows || []);
     setCurrentEmployee(employee);
     setLoading(false);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function complete() {
-    if (!item || !canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) || getChecklistStatus(item) === 'completed') return;
+  async function toggleCompletion() {
+    const currentStatus = getChecklistStatus(item);
+    if (!item || !canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) || currentStatus === 'deactivated') return;
     setSaving(true);
     setError('');
-    const { error: updateError } = await setChecklistCompletion(item.id);
+    const { error: updateError } = await setChecklistCompletion(item.id, currentStatus !== 'completed');
     if (updateError) setError(updateError.message);
     else await load();
+    setSaving(false);
+  }
+
+  async function addRemark(event) {
+    event.preventDefault();
+    if (!remark.trim() || !item) return;
+    setSaving(true);
+    setError('');
+    const { user } = await getCurrentEmployee();
+    if (!user) {
+      setError('Your session has expired. Please sign in again.');
+      setSaving(false);
+      return;
+    }
+    const { error: updateError } = await addChecklistItemUpdate(item.id, user.id, remark);
+    if (updateError) setError(updateError.message);
+    else { setRemark(''); await load(); }
     setSaving(false);
   }
 
@@ -56,7 +81,7 @@ export default function ChecklistTaskDetail() {
 
   const status = getChecklistStatus(item);
   const canComplete = canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) && status !== 'deactivated';
-  return <AppShell title="Checklist details" eyebrow="Workspace / Tasks" actions={<Link className="button button-ghost button-small" href="/tasks"><Icon name="chevronRight" size={15} className="flip-icon" />Back to tasks</Link>}>
+  return <AppShell title="Checklist details" eyebrow="Workspace / Tasks" actions={<><Link className="button button-ghost button-small" href="/tasks"><Icon name="chevronRight" size={15} className="flip-icon" />Back to tasks</Link>{canComplete && <button className="button button-primary button-small" type="button" onClick={toggleCompletion} disabled={saving}><Icon name={status === 'completed' ? 'activity' : 'check'} size={16} />{status === 'completed' ? 'Reopen task' : 'Mark complete'}</button>}</>}>
     {error && <div className="inline-alert error"><Icon name="warning" size={16} />{error}</div>}
     <div className="detail-layout">
       <section className="panel task-detail-main">
@@ -73,7 +98,8 @@ export default function ChecklistTaskDetail() {
         <div className="detail-notes"><SectionHeader eyebrow="Checklist source" title="Recurring rule" /><p>{frequencyLabel(item.template?.frequency)} · {item.template?.start_date || item.due_date}</p></div>
       </section>
       <aside className="detail-sidebar">
-        {canComplete && <section className="panel completion-panel"><SectionHeader eyebrow="Close the loop" title="Complete checklist item" description="Completion updates the same checklist record shown on the Checklist page." /><button className="button button-primary button-full" type="button" onClick={complete} disabled={saving || status === 'completed'}><Icon name={status === 'completed' ? 'checkCircle' : 'check'} size={16} />{saving ? 'Saving...' : status === 'completed' ? 'Completed' : 'Mark complete'}</button></section>}
+        <section className="panel update-panel"><SectionHeader eyebrow="Keep the loop closed" title="Add an update" description="Share progress, a blocker, or a completion note." /><form onSubmit={addRemark}><textarea className="input" rows="5" aria-label="Checklist update" placeholder="Write an update for the people following this task..." value={remark} onChange={(event) => setRemark(event.target.value)} /><button className="button button-primary button-full" type="submit" disabled={saving || !remark.trim()}>{saving ? 'Saving...' : 'Post update'}<Icon name="arrowUpRight" size={16} /></button></form></section>
+        <section className="panel activity-detail-panel"><SectionHeader eyebrow="Audit trail" title="Activity" />{updates.length ? <div className="timeline">{updates.map((update) => <div className="timeline-item" key={update.id}><span className="timeline-dot" /><div><div className="timeline-meta"><strong>{update.update_type === 'remark' ? 'Workspace update' : 'Status update'}</strong><small>{formatDateTime(update.created_at)}</small></div><p>{update.remark || `${update.update_type} recorded.`}</p>{update.proof_url && <a href={update.proof_url} target="_blank" rel="noreferrer">Open supporting file</a>}</div></div>)}</div> : <EmptyState compact icon="activity" title="No updates yet" description="The first remark or status change will appear here." />}</section>
       </aside>
     </div>
   </AppShell>;
