@@ -142,7 +142,7 @@ export default function Checklist() {
     const response = await fetch('/api/checklist/templates', { method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(editing ? { ...record, id: editing.id } : record) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) setError(payload.error || 'The checklist template could not be saved.');
-    else { setMessage(editing ? 'Checklist updated.' : 'Checklist created and scheduled.'); closeModal(); const generationResponse = await triggerChecklistGeneration(); if (!generationResponse?.success) setError(generationResponse?.error || 'Checklist saved, but its current item could not be generated.'); await load(); }
+    else { setMessage(editing ? 'Checklist updated. Open generated items were synchronized.' : 'Checklist created and scheduled.'); closeModal(); const generationResponse = await triggerChecklistGeneration(); if (!generationResponse?.success) setError(generationResponse?.error || 'Checklist saved, but its current item could not be generated.'); await load(); }
     setSaving(false);
   }
 
