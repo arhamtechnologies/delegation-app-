@@ -621,7 +621,7 @@ h1, h2, h3, p { margin-top: 0; }
   .selected-employee-context { justify-content: flex-start; margin-top: 10px; }
 }
 
-.employee-leave-reason { display: flex; align-items: center; }
+.employee-leave-reason { display: flex; align-items: center; }.configured-non-working-day-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
 
 @media print {
   .report-print-title { display: block; color: #111827; font-size: 22px; font-weight: 800; letter-spacing: .04em; }
