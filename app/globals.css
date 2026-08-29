@@ -34,6 +34,11 @@ h1, h2, h3, p { margin-top: 0; }
 .app-shell { position: relative; display: block; width: 100%; height: 100vh; min-width: 0; overflow: hidden; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; display: flex; flex-direction: column; width: 260px; min-width: 0; height: 100vh; min-height: 100vh; overflow: hidden; padding: 24px 16px 18px; background: var(--sidebar); color: #fff; }
 .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 25px; font-size: 18px; font-weight: 750; letter-spacing: -.02em; }
+.sidebar-brand-link { display: inline-flex; align-items: center; gap: 10px; color: inherit; transition: color .18s ease; }
+.sidebar-brand-link:hover { color: #fff; }
+.sidebar-brand-link:focus-visible, .mobile-brand:focus-visible { border-radius: 10px; outline: 2px solid rgba(155,148,255,.7); outline-offset: 3px; }
+.mobile-brand { transition: color .18s ease; }
+.mobile-brand:hover { color: var(--purple-dark); }
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 10px; background: linear-gradient(135deg, #8c83ff, #534be7); color: #fff; box-shadow: 0 7px 16px rgba(103, 92, 246, .32); }
 .brand-mark-large { width: 38px; height: 38px; border-radius: 12px; }
 .sidebar-close { display: none; margin-left: auto; padding: 6px; border: 0; background: transparent; color: #fff; }

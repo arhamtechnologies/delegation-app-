@@ -190,7 +190,7 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
 
   return <div className="app-shell">
     <aside className={`sidebar${menuOpen ? ' is-open' : ''}`} aria-label="Primary navigation">
-      <div className="sidebar-brand"><span className="brand-mark"><Icon name="sparkles" size={18} /></span><span>Delegation</span><button className="sidebar-close" type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)}><Icon name="close" /></button></div>
+      <div className="sidebar-brand"><Link className="sidebar-brand-link" href="/dashboard" aria-label="Go to Dashboard" onClick={() => setMenuOpen(false)}><span className="brand-mark"><Icon name="sparkles" size={18} /></span><span>Delegation</span></Link><button className="sidebar-close" type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)}><Icon name="close" /></button></div>
       <div className="workspace-switcher"><span className="workspace-dot" /><span><strong>Arham workspace</strong><small>Accountability hub</small></span><Icon name="chevronDown" size={14} /></div>
       <nav className="sidebar-nav" id="primary-navigation">
         {sections.map((section) => <div className="nav-section" key={section}><div className="nav-section-label">{section}</div>{visibleItems.filter((item) => item.section === section).map((item) => <Link className={`nav-link${pathname === item.href || pathname.startsWith(`${item.href}/`) ? ' active' : ''}`} key={item.href} href={item.href} onClick={() => setMenuOpen(false)}><Icon name={item.icon} size={18} /><span>{item.label}</span></Link>)}</div>)}
@@ -199,7 +199,7 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
     </aside>
     {menuOpen && <button className="nav-backdrop" type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
     <main className="main-content">
-      <header className="mobile-topbar"><button className="menu-toggle" type="button" aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><div className="mobile-brand"><span className="brand-mark"><Icon name="sparkles" size={15} /></span>Delegation</div><NotificationBell unreadCount={unreadCount} mobile /></header>
+      <header className="mobile-topbar"><button className="menu-toggle" type="button" aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><Link className="mobile-brand" href="/dashboard" aria-label="Go to Dashboard"><span className="brand-mark"><Icon name="sparkles" size={15} /></span>Delegation</Link><NotificationBell unreadCount={unreadCount} mobile /></header>
       <div className="page-container"><div className="page-header"><div className="page-heading"><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{description && <p>{description}</p>}</div><div className="page-header-tools"><NotificationBell unreadCount={unreadCount} />{actions ? <div className="page-actions">{actions}</div> : null}</div></div>{children}</div>
     </main>
   </div>;
