@@ -1,12 +1,15 @@
 -- Add timezone-aware due times without rewriting generated checklist history.
 alter table public.checklist_templates
   add column if not exists due_time time;
+
 update public.checklist_templates
 set due_time = '17:00:00'
 where due_time is null;
+
 alter table public.checklist_templates
   alter column due_time set default '17:00:00',
   alter column due_time set not null;
+
 -- Older templates did not require a start date. Use their first generated date
 -- when available, otherwise the current business date, so existing schedules
 -- remain valid under the new invariant.
@@ -17,8 +20,10 @@ set start_date = coalesce(
   (now() at time zone 'Asia/Kolkata')::date
 )
 where template.start_date is null;
+
 alter table public.checklist_templates
   drop constraint if exists checklist_templates_schedule_fields;
+
 alter table public.checklist_templates
   add constraint checklist_templates_schedule_fields check (
     start_date is not null
@@ -30,19 +35,24 @@ alter table public.checklist_templates
       or (frequency = 'monthly' and weekday is null and day_of_month is not null)
     )
   );
+
 alter table public.checklist_items
   add column if not exists due_at timestamptz;
+
 update public.checklist_items item
 set due_at = ((item.due_date::text || ' ' || template.due_time::text)::timestamp at time zone 'Asia/Kolkata')
 from public.checklist_templates template
 where template.id = item.template_id
   and item.due_at is null;
+
 alter table public.checklist_items
   alter column due_at set not null;
+
 create index if not exists checklist_items_employee_due_at_idx
   on public.checklist_items(employee_id, due_at desc);
 create index if not exists checklist_items_status_due_at_idx
   on public.checklist_items(status, due_at);
+
 -- Managers retain full template access; employees can read only the template
 -- attached to their own generated items so details can show recurrence safely.
 drop policy if exists "checklist templates managers read" on public.checklist_templates;
@@ -51,6 +61,7 @@ create policy "checklist templates managers read" on public.checklist_templates
     public.is_manager()
     or employee_id = (select id from public.employees where auth_user_id = auth.uid())
   );
+
 create or replace function public.guard_checklist_item_update()
 returns trigger language plpgsql set search_path = public as $$
 begin

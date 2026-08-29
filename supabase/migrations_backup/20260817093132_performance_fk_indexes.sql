@@ -13,5 +13,3 @@ create index if not exists checklist_items_completed_by_idx on public.checklist_
 create index if not exists employee_leave_periods_created_by_idx on public.employee_leave_periods(created_by);
 create index if not exists employee_non_working_days_created_by_idx on public.employee_non_working_days(created_by);
 create index if not exists checklist_non_working_day_operations_performed_by_idx on public.checklist_non_working_day_operations(performed_by);
-
-;

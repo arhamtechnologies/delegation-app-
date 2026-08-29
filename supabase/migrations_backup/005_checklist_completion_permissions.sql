@@ -2,6 +2,7 @@
 -- retaining assigned-item completion for doers and assigners.
 drop policy if exists "checklist items complete own" on public.checklist_items;
 drop policy if exists "checklist items complete" on public.checklist_items;
+
 create policy "checklist items complete" on public.checklist_items
   for update to authenticated
   using (

@@ -12,11 +12,14 @@ create table if not exists public.employee_non_working_days(
   created_by uuid references auth.users(id) on delete set null,
   constraint employee_non_working_days_unique unique (employee_id, non_working_date, reason)
 );
+
 create index if not exists employee_non_working_days_lookup_idx
   on public.employee_non_working_days(employee_id, non_working_date, reason);
+
 alter table public.employee_non_working_days enable row level security;
 grant select, insert, update, delete on public.employee_non_working_days to authenticated;
 grant all on public.employee_non_working_days to service_role;
+
 drop policy if exists "employee non-working days read" on public.employee_non_working_days;
 create policy "employee non-working days read" on public.employee_non_working_days
   for select to authenticated
@@ -25,6 +28,7 @@ create policy "employee non-working days read" on public.employee_non_working_da
     where auth_user_id = auth.uid()
       and role in ('super_admin', 'ea')
   ));
+
 drop policy if exists "employee non-working days insert" on public.employee_non_working_days;
 create policy "employee non-working days insert" on public.employee_non_working_days
   for insert to authenticated
@@ -33,6 +37,7 @@ create policy "employee non-working days insert" on public.employee_non_working_
     where auth_user_id = auth.uid()
       and role in ('super_admin', 'ea')
   ));
+
 drop policy if exists "employee non-working days update" on public.employee_non_working_days;
 create policy "employee non-working days update" on public.employee_non_working_days
   for update to authenticated
@@ -46,6 +51,7 @@ create policy "employee non-working days update" on public.employee_non_working_
     where auth_user_id = auth.uid()
       and role in ('super_admin', 'ea')
   ));
+
 drop policy if exists "employee non-working days delete" on public.employee_non_working_days;
 create policy "employee non-working days delete" on public.employee_non_working_days
   for delete to authenticated
@@ -54,6 +60,7 @@ create policy "employee non-working days delete" on public.employee_non_working_
     where auth_user_id = auth.uid()
       and role in ('super_admin', 'ea')
   ));
+
 -- The live project contains a legacy national_holidays shape. Extend it in
 -- place so existing records remain available to the new checklist API.
 create table if not exists public.national_holidays(
@@ -66,26 +73,32 @@ create table if not exists public.national_holidays(
   updated_at timestamptz not null default now(),
   unique (holiday_date, country)
 );
+
 alter table public.national_holidays add column if not exists country_code text;
 alter table public.national_holidays add column if not exists active boolean;
 alter table public.national_holidays add column if not exists country text;
 alter table public.national_holidays add column if not exists is_active boolean;
 alter table public.national_holidays add column if not exists updated_at timestamptz;
+
 update public.national_holidays
 set country = coalesce(nullif(trim(country), ''), case when upper(trim(country_code)) = 'IN' then 'India' else nullif(trim(country_code), '') end, 'India')
 where country is null or trim(country) = '';
+
 update public.national_holidays
 set is_active = coalesce(is_active, active, true)
 where is_active is null;
+
 update public.national_holidays
 set updated_at = coalesce(updated_at, created_at, now())
 where updated_at is null;
+
 alter table public.national_holidays alter column country set default 'India';
 alter table public.national_holidays alter column country set not null;
 alter table public.national_holidays alter column is_active set default true;
 alter table public.national_holidays alter column is_active set not null;
 alter table public.national_holidays alter column updated_at set default now();
 alter table public.national_holidays alter column updated_at set not null;
+
 do $$
 begin
   if not exists (
@@ -97,11 +110,14 @@ begin
       add constraint national_holidays_holiday_date_country_key unique (holiday_date, country);
   end if;
 end $$;
+
 create index if not exists national_holidays_direct_lookup_idx
   on public.national_holidays(holiday_date, country, is_active);
+
 alter table public.national_holidays enable row level security;
 grant select, insert, update, delete on public.national_holidays to authenticated;
 grant all on public.national_holidays to service_role;
+
 drop policy if exists "national holidays read" on public.national_holidays;
 drop policy if exists "national holidays manage" on public.national_holidays;
 drop policy if exists "national holidays insert" on public.national_holidays;
@@ -119,12 +135,14 @@ create policy "national holidays update" on public.national_holidays
 create policy "national holidays delete" on public.national_holidays
   for delete to authenticated
   using (exists (select 1 from public.employees where auth_user_id = auth.uid() and role in ('super_admin', 'ea')));
+
 insert into public.national_holidays(holiday_date, name, country, is_active)
 values
   ('2026-01-26', 'Republic Day', 'India', true),
   ('2026-08-15', 'Independence Day', 'India', true),
   ('2026-10-02', 'Gandhi Jayanti', 'India', true)
 on conflict (holiday_date, country) do nothing;
+
 -- Reuse the existing audit table/function when the earlier non-working-day
 -- migration has already been applied; create the same contract otherwise.
 create table if not exists public.checklist_non_working_day_operations(
@@ -136,11 +154,14 @@ create table if not exists public.checklist_non_working_day_operations(
   reason text not null,
   created_at timestamptz not null default now()
 );
+
 create index if not exists checklist_non_working_day_operations_date_idx
   on public.checklist_non_working_day_operations(selected_date, created_at desc);
+
 alter table public.checklist_non_working_day_operations enable row level security;
 grant select on public.checklist_non_working_day_operations to authenticated;
 grant all on public.checklist_non_working_day_operations to service_role;
+
 drop policy if exists "non-working-day operations read" on public.checklist_non_working_day_operations;
 create policy "non-working-day operations read" on public.checklist_non_working_day_operations
   for select to authenticated using (exists (
@@ -148,6 +169,7 @@ create policy "non-working-day operations read" on public.checklist_non_working_
     where auth_user_id = auth.uid()
       and role in ('super_admin', 'ea')
   ));
+
 create or replace function public.save_employee_non_working_dates(
   p_employee_id uuid,
   p_dates date[],
@@ -179,6 +201,7 @@ begin
   return jsonb_build_object('employee_id', p_employee_id, 'saved_count', saved_count);
 end;
 $$;
+
 create or replace function public.deactivate_sunday_checklist_items()
 returns integer
 language plpgsql
@@ -196,10 +219,12 @@ begin
   return deactivated_count;
 end;
 $$;
+
 revoke all on function public.save_employee_non_working_dates(uuid, date[], uuid)
   from public, anon, authenticated;
 grant execute on function public.save_employee_non_working_dates(uuid, date[], uuid)
   to service_role;
+
 revoke all on function public.deactivate_sunday_checklist_items()
   from public, anon, authenticated;
 grant execute on function public.deactivate_sunday_checklist_items()

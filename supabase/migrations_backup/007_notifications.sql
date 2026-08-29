@@ -4,11 +4,13 @@ alter table public.notifications
   add column if not exists entity_type text,
   add column if not exists entity_id uuid,
   add column if not exists dedupe_key text;
+
 update public.notifications
 set entity_type = 'task',
     entity_id = task_id
 where task_id is not null
   and (entity_type is null or entity_id is null);
+
 do $$
 begin
   if not exists (
@@ -22,8 +24,10 @@ begin
   end if;
 end;
 $$;
+
 create index if not exists notifications_recipient_unread_idx
   on public.notifications(recipient_employee_id, read_at, created_at desc);
+
 do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
@@ -40,12 +44,14 @@ exception when others then
   raise warning 'Notifications realtime publication could not be updated: %', sqlerrm;
 end;
 $$;
+
 -- Notification rows are created only by trusted database triggers. Clients can
 -- read their own rows and update read_at, but cannot insert or delete rows.
 revoke insert, delete on public.notifications from anon, authenticated;
 grant select on public.notifications to authenticated;
 revoke update on public.notifications from anon, authenticated;
 grant update (read_at) on public.notifications to authenticated;
+
 create or replace function public.insert_notification_event(
   p_recipient_employee_id uuid,
   p_actor_employee_id uuid,
@@ -94,8 +100,10 @@ exception when others then
   raise warning 'Notification insert failed: %', sqlerrm;
 end;
 $$;
+
 revoke all on function public.insert_notification_event(uuid, uuid, text, text, text, text, uuid, uuid, text)
   from public, anon, authenticated, service_role;
+
 create or replace function public.notify_task_events()
 returns trigger
 language plpgsql
@@ -201,12 +209,15 @@ exception when others then
   return new;
 end;
 $$;
+
 revoke all on function public.notify_task_events() from public, anon, authenticated, service_role;
+
 drop trigger if exists task_assignment_notification on public.tasks;
 drop trigger if exists task_notification_events on public.tasks;
 create trigger task_notification_events
 after insert or update on public.tasks
 for each row execute function public.notify_task_events();
+
 create or replace function public.notify_task_update_event()
 returns trigger
 language plpgsql
@@ -246,11 +257,14 @@ exception when others then
   return new;
 end;
 $$;
+
 revoke all on function public.notify_task_update_event() from public, anon, authenticated, service_role;
+
 drop trigger if exists task_update_notification on public.task_updates;
 create trigger task_update_notification
 after insert on public.task_updates
 for each row execute function public.notify_task_update_event();
+
 create or replace function public.notify_checklist_template_events()
 returns trigger
 language plpgsql
@@ -343,7 +357,9 @@ exception when others then
   return new;
 end;
 $$;
+
 revoke all on function public.notify_checklist_template_events() from public, anon, authenticated, service_role;
+
 drop trigger if exists checklist_template_notification_events on public.checklist_templates;
 -- Template notifications are emitted by the authenticated server routes so
 -- bulk import/edit operations can be grouped per employee.
@@ -424,7 +440,9 @@ exception when others then
   return new;
 end;
 $$;
+
 revoke all on function public.notify_checklist_item_events() from public, anon, authenticated, service_role;
+
 drop trigger if exists checklist_item_notification_events on public.checklist_items;
 create trigger checklist_item_notification_events
 after insert or update of status on public.checklist_items

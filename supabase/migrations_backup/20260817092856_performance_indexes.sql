@@ -29,5 +29,3 @@ create index if not exists checklist_items_due_at_status_idx
 
 create index if not exists checklist_templates_active_created_at_idx
   on public.checklist_templates(active, created_at desc);
-
-;

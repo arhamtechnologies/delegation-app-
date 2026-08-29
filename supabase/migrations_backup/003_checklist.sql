@@ -17,6 +17,7 @@ create table if not exists public.checklist_templates(
     or (frequency = 'monthly' and weekday is null and day_of_month is not null and start_date is null)
   )
 );
+
 create table if not exists public.checklist_items(
   id uuid primary key default gen_random_uuid(),
   template_id uuid not null references public.checklist_templates(id) on delete restrict,
@@ -32,6 +33,7 @@ create table if not exists public.checklist_items(
     or (status in ('pending','overdue') and completed_at is null and completed_by is null)
   )
 );
+
 create unique index if not exists checklist_items_template_due_date_key
   on public.checklist_items(template_id, due_date);
 create index if not exists checklist_templates_employee_active_idx
@@ -40,25 +42,32 @@ create index if not exists checklist_items_employee_due_date_idx
   on public.checklist_items(employee_id, due_date desc);
 create index if not exists checklist_items_status_due_date_idx
   on public.checklist_items(status, due_date);
+
 alter table public.checklist_templates enable row level security;
 alter table public.checklist_items enable row level security;
+
 grant select, insert, update, delete on public.checklist_templates to authenticated;
 grant select, update on public.checklist_items to authenticated;
+
 drop policy if exists "checklist templates managers read" on public.checklist_templates;
 create policy "checklist templates managers read" on public.checklist_templates
   for select to authenticated using (public.is_manager());
+
 drop policy if exists "checklist templates managers create" on public.checklist_templates;
 create policy "checklist templates managers create" on public.checklist_templates
   for insert to authenticated
   with check (public.is_manager() and created_by = auth.uid());
+
 drop policy if exists "checklist templates managers update" on public.checklist_templates;
 create policy "checklist templates managers update" on public.checklist_templates
   for update to authenticated
   using (public.is_manager())
   with check (public.is_manager());
+
 drop policy if exists "checklist templates managers delete" on public.checklist_templates;
 create policy "checklist templates managers delete" on public.checklist_templates
   for delete to authenticated using (public.is_manager());
+
 drop policy if exists "checklist items read" on public.checklist_items;
 create policy "checklist items read" on public.checklist_items
   for select to authenticated
@@ -66,6 +75,7 @@ create policy "checklist items read" on public.checklist_items
     public.is_manager()
     or employee_id = (select id from public.employees where auth_user_id = auth.uid())
   );
+
 drop policy if exists "checklist items complete own" on public.checklist_items;
 create policy "checklist items complete own" on public.checklist_items
   for update to authenticated
@@ -75,6 +85,7 @@ create policy "checklist items complete own" on public.checklist_items
     and status = 'completed'
     and completed_by = auth.uid()
   );
+
 create or replace function public.set_checklist_template_updated_at()
 returns trigger language plpgsql set search_path = public as $$
 begin
@@ -82,10 +93,12 @@ begin
   return new;
 end;
 $$;
+
 drop trigger if exists checklist_template_updated_at on public.checklist_templates;
 create trigger checklist_template_updated_at
 before update on public.checklist_templates
 for each row execute function public.set_checklist_template_updated_at();
+
 create or replace function public.guard_checklist_item_update()
 returns trigger language plpgsql set search_path = public as $$
 begin
@@ -115,6 +128,7 @@ begin
   return new;
 end;
 $$;
+
 drop trigger if exists checklist_item_update_guard on public.checklist_items;
 create trigger checklist_item_update_guard
 before update on public.checklist_items

@@ -72,15 +72,26 @@ export async function PATCH(request) {
   let payload;
   try { payload = await request.json(); } catch { return checklistApiError('The checklist request could not be read.', 400); }
   if (!payload?.id) return checklistApiError('A checklist template is required.', 400);
+  const updateContext = { operation: 'update_checklist_template', templateId: payload.id, oldEmployeeId: null, newEmployeeId: payload.employee_id || null };
   try {
     const { data: previous, error: previousError } = await authorization.admin.from('checklist_templates').select('id,employee_id,task,frequency,weekday,day_of_month,monthly_days,start_date,due_time,active,created_by').eq('id', payload.id).maybeSingle();
-    if (previousError || !previous) return checklistApiError('The checklist template was not found.', 404);
+    if (previousError) {
+      console.error('Checklist template update lookup failed.', { ...updateContext, code: previousError.code, message: previousError.message, details: previousError.details, hint: previousError.hint });
+      return checklistApiError('The checklist template could not be loaded.', 500);
+    }
+    if (!previous) return checklistApiError('The checklist template was not found.', 404);
+    updateContext.oldEmployeeId = previous.employee_id;
     const record = normalizeRecord(payload, previous.created_by);
-    const { data: employee } = await authorization.admin.from('employees').select('id').eq('id', record.employee_id).eq('active', true).maybeSingle();
+    updateContext.newEmployeeId = record.employee_id;
+    const { data: employee, error: employeeError } = await authorization.admin.from('employees').select('id').eq('id', record.employee_id).eq('active', true).maybeSingle();
+    if (employeeError) {
+      console.error('Checklist template employee validation failed.', { ...updateContext, code: employeeError.code, message: employeeError.message, details: employeeError.details, hint: employeeError.hint });
+      return checklistApiError('The selected employee could not be verified.', 500);
+    }
     if (!employee) return checklistApiError('Choose an active existing employee.', 400);
     const { data: updated, error } = await authorization.admin.from('checklist_templates').update(record).eq('id', payload.id).select('id,employee_id,task,frequency,weekday,day_of_month,monthly_days,start_date,due_time,active,updated_at').single();
     if (error) {
-      console.error('Checklist template update failed.', { code: error.code, message: error.message });
+      console.error('Checklist template update failed.', { ...updateContext, code: error.code, message: error.message, details: error.details, hint: error.hint });
       return checklistApiError('The checklist template could not be updated.', 500);
     }
     const fingerprint = notificationFingerprint([updated.id, updated.employee_id, updated.task, updated.frequency, updated.weekday, updated.day_of_month, updated.monthly_days, updated.start_date, updated.due_time, updated.active]);
@@ -96,6 +107,7 @@ export async function PATCH(request) {
     await createServerNotifications(authorization.admin, notifications.filter((notification) => notification.recipient_employee_id !== authorization.employee.id).map((notification) => ({ ...notification, actor_employee_id: authorization.employee.id })));
     return Response.json({ success: true, template: updated });
   } catch (error) {
+    console.error('Checklist template update request failed.', { ...updateContext, code: error.code, message: error.message, details: error.details, hint: error.hint });
     return checklistApiError(error.message || 'The checklist template could not be updated.', 400);
   }
 }
