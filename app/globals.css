@@ -151,10 +151,24 @@ h1, h2, h3, p { margin-top: 0; }
   .overview-metrics .metric-icon { width: 32px; height: 32px; border-radius: 10px; }
   .overview-metrics .metric-value { margin-top: 12px; font-size: 30px; }
   .overview-metrics .metric-label { margin-top: 2px; font-size: 12px; }
+
+  .metric-grid-four { gap: 12px; }
+  .metric-grid-four .metric-card { min-height: 124px; padding: 14px; }
+  .metric-grid-four .metric-icon { width: 32px; height: 32px; border-radius: 10px; }
+  .metric-grid-four .metric-value { margin-top: 12px; font-size: 30px; }
+  .metric-grid-four .metric-label { margin-top: 2px; font-size: 12px; }
+
+  .checklist-summary { gap: 12px; }
+  .checklist-summary .inline-stat { min-height: 74px; padding: 12px; }
+  .checklist-summary .inline-stat-icon { width: 30px; height: 30px; }
+  .checklist-summary .inline-stat strong { font-size: 20px; }
+  .checklist-summary .inline-stat span:not(.inline-stat-icon) { font-size: 10px; }
 }
 
 @media (max-width: 440px) {
   .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .checklist-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .work-type-control { flex: 0 1 auto; }
