@@ -145,6 +145,18 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-width: 440px) { .metric-grid, .task-summary-row { grid-template-columns: minmax(0, 1fr); }.metric-card { min-height: 115px; }.metric-value { margin-top: 12px; }.hero-strip { padding: 20px; }.page-actions .button { flex: 1 1 auto; }.section-header { display: block; }.section-header > .button { margin-top: 12px; }.detail-topline { align-items: flex-start; flex-direction: column; }.detail-metadata { grid-template-columns: minmax(0, 1fr); }.modal-actions .button { flex: 1; }.profile-preview { align-items: flex-start; flex-wrap: wrap; }.profile-preview .button { width: 100%; margin-left: 65px; }.notification-item { gap: 9px; }.notification-action { display: none; }.notification-list { padding-right: 14px; padding-left: 14px; }.notification-tabs { padding-right: 14px; padding-left: 14px; }.pulse-stats { gap: 5px; }.pulse-stats strong { font-size: 16px; } }
 @media print { .sidebar, .mobile-topbar, .page-actions, .filter-bar, .button { display: none !important; }.app-shell { display: block; height: auto; overflow: visible; }.main-content { width: 100%; height: auto; margin-left: 0; overflow: visible; }.page-container { padding: 20px; }.panel, .metric-card { box-shadow: none; } }
 
+@media (max-width: 720px) {
+  .overview-metrics { gap: 12px; }
+  .overview-metrics .metric-card { min-height: 124px; padding: 14px; }
+  .overview-metrics .metric-icon { width: 32px; height: 32px; border-radius: 10px; }
+  .overview-metrics .metric-value { margin-top: 12px; font-size: 30px; }
+  .overview-metrics .metric-label { margin-top: 2px; font-size: 12px; }
+}
+
+@media (max-width: 440px) {
+  .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .work-type-control { flex: 0 1 auto; }
 .work-type-toggle { display: inline-flex; min-height: 38px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .work-type-toggle button { min-height: 30px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-strong); font-size: 10px; font-weight: 680; white-space: nowrap; }
