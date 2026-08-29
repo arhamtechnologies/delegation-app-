@@ -1,5 +1,5 @@
 import { authorizeNonWorkingDayManager, checklistApiError } from '../../../../lib/checklist-server';
-import { isValidChecklistDate } from '../../../../lib/checklist-non-working-day';
+import { deactivateNonWorkingDayItems, formatNonWorkingDayError, getNonWorkingDayPreview, isValidChecklistDate } from '../../../../lib/checklist-non-working-day';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +15,22 @@ function normalizeHoliday(payload, fallback = {}) {
   if (!country || country.length > 80) throw new Error('Country must be between 2 and 80 characters.');
   if (typeof isActive !== 'boolean') throw new Error('Holiday active status must be true or false.');
   return { holiday_date: holidayDate, name, country, is_active: isActive, updated_at: new Date().toISOString() };
+}
+
+function holidayErrorResponse(error, fallbackMessage) {
+  const validationError = /Holiday date|Holiday name|Country must|Holiday active status/.test(error?.message || '');
+  return checklistApiError(validationError ? error.message : formatNonWorkingDayError(error) || fallbackMessage, validationError ? 400 : 500);
+}
+
+async function applyRetroactiveHolidayDeactivation(admin, date, actor) {
+  const preview = await getNonWorkingDayPreview(admin, date);
+  if (!preview.isNationalHoliday) return { deactivatedCount: 0, notificationsQueued: 0, operationId: null };
+  const result = await deactivateNonWorkingDayItems(admin, preview, actor);
+  return {
+    deactivatedCount: result.deactivated.length,
+    notificationsQueued: result.notificationsQueued,
+    operationId: result.operationId,
+  };
 }
 
 export async function GET(request) {
@@ -36,9 +52,13 @@ export async function POST(request) {
     if (existing) return checklistApiError('A holiday already exists for this country and date.', 409);
     const { data, error } = await authorization.admin.from('national_holidays').insert(holiday).select('id,holiday_date,name,country,is_active,created_at,updated_at').single();
     if (error) return checklistApiError('The national holiday could not be added.', 500);
-    return Response.json({ success: true, holiday: data });
+    const deactivation = holiday.is_active
+      ? await applyRetroactiveHolidayDeactivation(authorization.admin, holiday.holiday_date, authorization.employee)
+      : { deactivatedCount: 0, notificationsQueued: 0, operationId: null };
+    return Response.json({ success: true, holiday: data, ...deactivation });
   } catch (error) {
-    return checklistApiError(error.message || 'The national holiday could not be added.', 400);
+    console.error('National holiday creation failed.', { code: error?.code, message: error?.message });
+    return holidayErrorResponse(error, 'The national holiday could not be added.');
   }
 }
 
@@ -56,9 +76,14 @@ export async function PATCH(request) {
     if (duplicate) return checklistApiError('A holiday already exists for this country and date.', 409);
     const { data, error } = await authorization.admin.from('national_holidays').update(holiday).eq('id', payload.id).select('id,holiday_date,name,country,is_active,created_at,updated_at').single();
     if (error) return checklistApiError('The national holiday could not be updated.', 500);
-    return Response.json({ success: true, holiday: data });
+    const shouldApplyDeactivation = holiday.is_active && (!previous.is_active || previous.holiday_date !== holiday.holiday_date);
+    const deactivation = shouldApplyDeactivation
+      ? await applyRetroactiveHolidayDeactivation(authorization.admin, holiday.holiday_date, authorization.employee)
+      : { deactivatedCount: 0, notificationsQueued: 0, operationId: null };
+    return Response.json({ success: true, holiday: data, ...deactivation });
   } catch (error) {
-    return checklistApiError(error.message || 'The national holiday could not be updated.', 400);
+    console.error('National holiday update failed.', { code: error?.code, message: error?.message });
+    return holidayErrorResponse(error, 'The national holiday could not be updated.');
   }
 }
 
