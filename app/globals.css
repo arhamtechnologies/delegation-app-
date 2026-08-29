@@ -664,3 +664,7 @@ h1, h2, h3, p { margin-top: 0; }
   .report-detail-panel { break-before: auto; }
   .report-table th, .report-table td { padding: 7px 6px; font-size: 9px; }
 }
+
+@media (max-width: 720px) {
+  .page-header-tools { justify-content: flex-start; }
+}
