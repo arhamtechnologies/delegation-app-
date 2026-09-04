@@ -189,6 +189,86 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-width: 720px) {
   .page-header-tools { justify-content: flex-start; }
 }
+
+/* Calendar employee leave presentation */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.non-working-day-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.non-working-day-header-actions .button-count { min-width: 18px; height: 18px; margin-left: 1px; background: #f0edff; color: var(--purple-dark); }
+.employee-leave-list-header { align-items: center; margin: 4px 0 12px; }
+.employee-leave-list-header > div { gap: 9px; }
+.employee-leave-list-header h3 { font-size: 14px; }
+.today-leave-count { display: inline-flex; align-items: center; min-height: 21px; padding: 0 8px; border-radius: 999px; background: #f0edff; color: var(--purple-dark) !important; font-size: 10px !important; font-weight: 750; }
+.today-leave-date { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.today-leave-date svg { color: var(--purple); }
+.employee-leave-today-list { gap: 7px; }
+.employee-leave-today-row { grid-template-columns: minmax(0, 1fr) auto auto; min-height: 62px; padding: 10px 12px; border-radius: 11px; }
+.employee-leave-today-row:hover { transform: none; }
+.employee-leave-person { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.employee-leave-avatar { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid #ddd9ff; border-radius: 50%; background: #f0edff; color: var(--purple-dark); font-size: 10px; font-weight: 800; letter-spacing: .02em; }
+.employee-leave-today-row .employee-leave-copy { gap: 3px; }
+.employee-leave-today-row .employee-leave-copy strong { font-size: 11px; }
+.employee-leave-today-row .employee-leave-copy span { font-size: 9px; }
+.employee-leave-type { justify-self: end; padding: 5px 8px; font-size: 9px; }
+.employee-leave-today-row .employee-leave-actions { justify-content: flex-end; }
+.employee-leave-empty { display: flex; align-items: center; gap: 11px; min-height: 70px; padding: 14px; border: 1px dashed #d9d6ed; border-radius: 11px; background: #fbfaff; }
+.employee-leave-empty-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 32px; height: 32px; border-radius: 10px; background: #f0edff; color: var(--purple); }
+.employee-leave-empty > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.employee-leave-empty strong { color: var(--ink-strong); font-size: 11px; }
+.employee-leave-empty span:not(.employee-leave-empty-icon) { color: var(--muted); font-size: 10px; }
+.earlier-leave-toolbar { display: grid; gap: 10px; margin-bottom: 18px; padding: 12px; border: 1px solid #eff1f6; border-radius: 12px; background: var(--surface-soft); }
+.earlier-leave-search { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: #9aa5b6; }
+.earlier-leave-search input { width: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink-strong); font-size: 11px; }
+.earlier-leave-search:focus-within { border-color: #a9a2ff; box-shadow: 0 0 0 3px rgba(103,92,246,.11); }
+.earlier-leave-date-filter { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.earlier-leave-date-filter label { display: flex; flex: 1 1 145px; flex-direction: column; gap: 5px; color: var(--muted); font-size: 9px; font-weight: 700; }
+.earlier-leave-date-filter .input { min-height: 36px; font-size: 10px; }
+.earlier-leave-date-filter .button { flex: 0 0 auto; }
+.earlier-leave-summary { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.earlier-leave-summary strong { color: var(--ink-strong); font-size: 13px; }
+.earlier-leave-summary strong span { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: #f0edff; color: var(--purple-dark); font-size: 10px; }
+.earlier-leave-summary small { color: var(--muted); font-size: 9px; }
+.earlier-leave-table { min-width: 0; }
+.earlier-leave-table-heading, .earlier-leave-row { display: grid; grid-template-columns: minmax(130px, 1.45fr) minmax(84px, 1fr) minmax(84px, 1fr) 42px minmax(90px, 1fr) auto; align-items: center; gap: 10px; }
+.earlier-leave-table-heading { padding: 0 11px 9px; color: #a0aabc; font-size: 9px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.earlier-leave-table-body { display: grid; gap: 7px; }
+.earlier-leave-row { min-height: 55px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--muted-strong); font-size: 10px; }
+.earlier-leave-row > span { min-width: 0; }
+.earlier-leave-row:hover { border-color: #c9c4ff; box-shadow: 0 6px 16px rgba(55, 45, 145, .06); }
+.earlier-leave-employee { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.earlier-leave-employee strong { min-width: 0; overflow: hidden; color: var(--ink-strong); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.earlier-leave-employee .employee-leave-avatar { width: 27px; height: 27px; font-size: 9px; }
+.earlier-leave-type { color: var(--blue) !important; font-size: 9px; font-weight: 700; }
+.earlier-leave-actions { display: flex; justify-content: flex-end; gap: 5px; min-width: max-content; }
+.earlier-leave-actions .button { min-height: 31px; padding: 0 8px; font-size: 10px; }
+.earlier-leave-view-all { display: flex; margin: 13px auto 0; }
+.earlier-leave-view-all span { color: var(--muted); }
+.earlier-leave-empty { display: flex; align-items: center; flex-direction: column; gap: 5px; min-height: 130px; padding: 28px 12px; border: 1px dashed #d9d6ed; border-radius: 11px; background: #fbfaff; text-align: center; }
+.earlier-leave-empty svg { margin-bottom: 2px; color: var(--purple); }
+.earlier-leave-empty strong { color: var(--ink-strong); font-size: 11px; }
+.earlier-leave-empty span { color: var(--muted); font-size: 10px; }
+
+@media (max-width: 720px) {
+  .non-working-day-header-actions { justify-content: flex-start; }
+  .employee-leave-today-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .employee-leave-today-row .employee-leave-actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 2px; }
+  .earlier-leave-table-heading { display: none; }
+  .earlier-leave-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 12px; padding: 12px; }
+  .earlier-leave-row > span { display: flex; flex-direction: column; gap: 3px; }
+  .earlier-leave-row > span:before { color: #a0aabc; content: attr(data-label); font-size: 8px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+  .earlier-leave-employee { grid-column: 1 / -1; }
+  .earlier-leave-type { align-items: flex-start; }
+  .earlier-leave-actions { grid-column: 1 / -1; justify-content: flex-start; padding-top: 2px; }
+}
+
+@media (max-width: 440px) {
+  .non-working-day-header-actions .button { flex: 1 1 auto; }
+  .employee-leave-list-header { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .employee-leave-today-row { grid-template-columns: minmax(0, 1fr); }
+  .employee-leave-today-row .employee-leave-type { grid-column: 1; justify-self: start; }
+  .employee-leave-today-row .employee-leave-actions { grid-column: 1; justify-content: flex-start; }
+  .earlier-leave-date-filter label { flex-basis: 100%; }
+  .earlier-leave-date-filter .button { width: 100%; }
+}
 .task-table-heading, .task-list-desktop .task-row-grid { grid-template-columns: minmax(180px, 1.5fr) minmax(110px, .85fr) minmax(80px, .75fr) minmax(90px, .95fr) minmax(70px, .85fr) minmax(84px, .75fr); }
 .task-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; }
 .row-action-delete { padding: 2px; border: 0; background: transparent; cursor: pointer; }
@@ -672,4 +752,24 @@ h1, h2, h3, p { margin-top: 0; }
 
 @media (max-width: 720px) {
   .page-header-tools { justify-content: flex-start; }
+}
+
+/* Keep the compact Calendar rows ahead of the legacy leave-list rules above. */
+.employee-leave-list-header { align-items: center; margin: 4px 0 12px; }
+.employee-leave-list-header > div { gap: 9px; }
+.employee-leave-list-header h3 { font-size: 14px; }
+.employee-leave-today-list { gap: 7px; }
+.employee-leave-today-row { grid-template-columns: minmax(0, 1fr) auto auto; min-height: 62px; padding: 10px 12px; border-radius: 11px; }
+.employee-leave-today-row:hover { transform: none; }
+
+@media (max-width: 720px) {
+  .employee-leave-today-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .employee-leave-today-row .employee-leave-actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 2px; }
+}
+
+@media (max-width: 440px) {
+  .employee-leave-list-header { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .employee-leave-today-row { grid-template-columns: minmax(0, 1fr); }
+  .employee-leave-today-row .employee-leave-type { grid-column: 1; justify-self: start; }
+  .employee-leave-today-row .employee-leave-actions { grid-column: 1; justify-content: flex-start; }
 }

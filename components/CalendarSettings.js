@@ -12,19 +12,35 @@ function formatSelectedDate(value) {
   return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00Z`));
 }
 
-function getLeaveDateParts(value) {
-  const parts = new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short', weekday: 'long' }).formatToParts(new Date(`${value}T12:00:00Z`));
-  return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+function getEmployeeName(group) {
+  return group.employee?.name || formatEmployeeId(group.employeeId);
 }
 
-function getEmployeeLeaveEntries(groups) {
-  return groups.flatMap((group) => group.dates.map((dateValue) => ({ group, dateValue }))).sort((left, right) => {
-    const dateDifference = left.dateValue.localeCompare(right.dateValue);
+function getEmployeeInitials(name) {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '—';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+}
+
+function getEmployeeLeaveEntries(groups, predicate = () => true) {
+  return groups.flatMap((group) => group.dates.filter(predicate).map((dateValue) => ({ group, dateValue, employeeName: getEmployeeName(group) })));
+}
+
+function sortTodayLeaveEntries(entries) {
+  return [...entries].sort((left, right) => left.employeeName.localeCompare(right.employeeName, undefined, { sensitivity: 'base' }));
+}
+
+function sortEarlierLeaveEntries(entries) {
+  return [...entries].sort((left, right) => {
+    const dateDifference = right.dateValue.localeCompare(left.dateValue);
     if (dateDifference) return dateDifference;
-    const leftName = left.group.employee?.name || formatEmployeeId(left.group.employeeId);
-    const rightName = right.group.employee?.name || formatEmployeeId(right.group.employeeId);
-    return leftName.localeCompare(rightName, undefined, { sensitivity: 'base' });
+    return left.employeeName.localeCompare(right.employeeName, undefined, { sensitivity: 'base' });
   });
+}
+
+function formatTodayDate(value) {
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00Z`));
 }
 
 function NationalHolidayModal({ open, editing, form, onChange, onClose, onSave, saving, error }) {
@@ -58,6 +74,23 @@ function EmployeeLeaveModal({ open, leaveWorkingEmployees, leaveEmployeeId, onLe
   </Modal>;
 }
 
+function EarlierLeaveModal({ open, entries, totalCount, search, fromDate, toDate, showAll, onSearchChange, onFromDateChange, onToDateChange, onClearFilters, onViewAll, onEdit, onRemove, onClose }) {
+  if (!open) return null;
+  const visibleEntries = showAll ? entries : entries.slice(0, 5);
+  return <Modal open={open} wide title="Earlier leave records" description="View and manage past employee non-working days." onClose={onClose}>
+    <div className="earlier-leave-toolbar">
+      <label className="earlier-leave-search"><Icon name="search" size={15} /><span className="sr-only">Search employee</span><input type="search" placeholder="Search employee..." value={search} onChange={(event) => onSearchChange(event.target.value)} /></label>
+      <div className="earlier-leave-date-filter"><label>From<input className="input" type="date" value={fromDate} onChange={(event) => onFromDateChange(event.target.value)} /></label><label>To<input className="input" type="date" value={toDate} onChange={(event) => onToDateChange(event.target.value)} /></label><button className="button button-ghost button-small" type="button" onClick={onClearFilters} disabled={!search && !fromDate && !toDate}>Clear</button></div>
+    </div>
+    <div className="earlier-leave-summary"><strong>Earlier leave records <span>{totalCount}</span></strong>{entries.length !== totalCount && <small>{entries.length} matching {entries.length === 1 ? 'record' : 'records'}</small>}</div>
+    {visibleEntries.length ? <div className="earlier-leave-table" role="table" aria-label="Earlier leave records">
+      <div className="earlier-leave-table-heading" role="row"><span>Employee</span><span>From</span><span>To</span><span>Days</span><span>Leave type</span><span>Actions</span></div>
+      <div className="earlier-leave-table-body">{visibleEntries.map(({ group, dateValue, employeeName }) => <div className="earlier-leave-row" role="row" key={`${group.employeeId}-${dateValue}`}><div className="earlier-leave-employee" data-label="Employee"><span className="employee-leave-avatar" aria-hidden="true">{getEmployeeInitials(employeeName)}</span><strong>{employeeName}</strong></div><span data-label="From">{formatSelectedDate(dateValue)}</span><span data-label="To">{formatSelectedDate(dateValue)}</span><span data-label="Days">1</span><span className="earlier-leave-type" data-label="Leave type">Employee Leave</span><div className="earlier-leave-actions" data-label="Actions"><button className="button button-ghost button-small" type="button" onClick={() => onEdit({ group, dateValue })}>Edit</button><button className="button button-ghost button-small" type="button" onClick={() => onRemove(group, dateValue)}>Remove</button></div></div>)}</div>
+    </div> : <div className="earlier-leave-empty"><Icon name="search" size={18} /><strong>No earlier leave found</strong><span>Try a different employee or date range.</span></div>}
+    {!showAll && entries.length > visibleEntries.length && <button className="button button-ghost button-small earlier-leave-view-all" type="button" onClick={onViewAll}>View all earlier leave <span>({entries.length})</span><Icon name="chevronDown" size={14} /></button>}
+  </Modal>;
+}
+
 export default function CalendarSettings() {
   const [employee, setEmployee] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -72,6 +105,11 @@ export default function CalendarSettings() {
   const [holidayForm, setHolidayForm] = useState({ holiday_date: getChecklistBusinessDate(new Date(), defaultChecklistTimeZone), name: '', country: 'India', is_active: true });
   const [holidaySaving, setHolidaySaving] = useState(false);
   const [employeeLeaveModalOpen, setEmployeeLeaveModalOpen] = useState(false);
+  const [earlierLeaveOpen, setEarlierLeaveOpen] = useState(false);
+  const [earlierLeaveSearch, setEarlierLeaveSearch] = useState('');
+  const [earlierLeaveFromDate, setEarlierLeaveFromDate] = useState('');
+  const [earlierLeaveToDate, setEarlierLeaveToDate] = useState('');
+  const [showAllEarlierLeave, setShowAllEarlierLeave] = useState(false);
   const [leaveEmployeeId, setLeaveEmployeeId] = useState('');
   const [leaveDates, setLeaveDates] = useState([]);
   const [leaveDateInput, setLeaveDateInput] = useState('');
@@ -150,16 +188,30 @@ export default function CalendarSettings() {
 
   function closeEmployeeLeaveModal() { setEmployeeLeaveModalOpen(false); setError(''); }
 
+  function openEarlierLeave() { setEarlierLeaveSearch(''); setEarlierLeaveFromDate(''); setEarlierLeaveToDate(''); setShowAllEarlierLeave(false); setEarlierLeaveOpen(true); }
+  function closeEarlierLeave() { setEarlierLeaveOpen(false); }
+  function editEmployeeLeaveFromHistory({ group }) { closeEarlierLeave(); openEmployeeLeaveConfig(group); }
+
   if (loading) return <section className="panel checklist-loading"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></section>;
   if (!employee || !canDeactivateNonWorkingDayTasks(employee.role)) return <section className="panel"><EmptyState icon="calendar" title="Calendar settings unavailable" description="You do not have permission to manage workspace calendars." /></section>;
-  const employeeLeaveEntries = getEmployeeLeaveEntries(employeeLeave);
+  const today = getChecklistBusinessDate(new Date(), defaultChecklistTimeZone);
+  const todayLeaveEntries = sortTodayLeaveEntries(getEmployeeLeaveEntries(employeeLeave, (dateValue) => dateValue === today));
+  const earlierLeaveEntries = sortEarlierLeaveEntries(getEmployeeLeaveEntries(employeeLeave, (dateValue) => dateValue < today));
+  const normalizedEarlierSearch = earlierLeaveSearch.trim().toLocaleLowerCase();
+  const filteredEarlierLeaveEntries = earlierLeaveEntries.filter(({ employeeName, dateValue }) => {
+    const matchesSearch = !normalizedEarlierSearch || employeeName.toLocaleLowerCase().includes(normalizedEarlierSearch);
+    const matchesFrom = !earlierLeaveFromDate || dateValue >= earlierLeaveFromDate;
+    const matchesTo = !earlierLeaveToDate || dateValue <= earlierLeaveToDate;
+    return matchesSearch && matchesFrom && matchesTo;
+  });
 
   return <>
     {message && <div className="inline-alert success"><Icon name="checkCircle" size={16} />{message}</div>}
     {error && !employeeLeaveModalOpen && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
-    <section className="panel checklist-panel non-working-day-settings"><SectionHeader eyebrow="Calendar" title="Non-working days" description="Sunday is automatic. Add employee leave dates here." action={<button className="button button-ghost button-small" type="button" onClick={openEmployeeLeaveModal}><Icon name="plus" size={15} />Employee Leave</button>} /><div className="employee-leave-list-header"><div><h3>Employee leave</h3><span>{employeeLeaveEntries.length} {employeeLeaveEntries.length === 1 ? 'entry' : 'entries'}</span></div></div>{employeeLeaveEntries.length ? <div className="employee-leave-list">{employeeLeaveEntries.map(({ group, dateValue }) => { const dateParts = getLeaveDateParts(dateValue); const employeeName = group.employee?.name || formatEmployeeId(group.employeeId); return <div className="employee-leave-row" key={`${group.employeeId}-${dateValue}`}><div className="employee-leave-date-badge" aria-label={formatSelectedDate(dateValue)}><strong>{dateParts.day}</strong><span>{dateParts.month}</span><small>{dateParts.weekday}</small></div><div className="employee-leave-copy"><strong>{employeeName}</strong><span>Employee Leave</span></div><div className="employee-leave-actions"><button className="button button-ghost button-small" type="button" onClick={() => openEmployeeLeaveConfig(group)}>Edit</button><button className="button button-ghost button-small" type="button" onClick={() => removeConfiguredLeaveDate(group, dateValue)}>Remove</button></div></div>; })}</div> : <EmptyState compact icon="calendar" title="No employee leave dates configured" description="Add employee leave dates to mark those days as non-working." />}</section>
+    <section className="panel checklist-panel non-working-day-settings"><SectionHeader eyebrow="Calendar" title="Non-working days" description="Sunday is automatic. Add employee leave dates here." action={<div className="non-working-day-header-actions"><button className="button button-ghost button-small" type="button" onClick={openEarlierLeave}><Icon name="clock" size={15} />Earlier leave{earlierLeaveEntries.length > 0 && <span className="button-count">{earlierLeaveEntries.length}</span>}</button><button className="button button-primary button-small" type="button" onClick={openEmployeeLeaveModal}><Icon name="plus" size={15} />Employee Leave</button></div>} /><div className="employee-leave-list-header"><div><h3>Today&apos;s leave</h3><span className="today-leave-count">{todayLeaveEntries.length} {todayLeaveEntries.length === 1 ? 'employee' : 'employees'}</span></div><span className="today-leave-date"><Icon name="calendar" size={14} />{formatTodayDate(today)}</span></div>{todayLeaveEntries.length ? <div className="employee-leave-list employee-leave-today-list">{todayLeaveEntries.map(({ group, dateValue, employeeName }) => <div className="employee-leave-row employee-leave-today-row" key={`${group.employeeId}-${dateValue}`}><div className="employee-leave-person"><span className="employee-leave-avatar" aria-hidden="true">{getEmployeeInitials(employeeName)}</span><div className="employee-leave-copy"><strong>{employeeName}</strong><span>Employee</span></div></div><span className="badge badge-blue employee-leave-type">Employee Leave</span><div className="employee-leave-actions"><button className="button button-ghost button-small" type="button" onClick={() => openEmployeeLeaveConfig(group)}>Edit</button><button className="button button-ghost button-small" type="button" onClick={() => removeConfiguredLeaveDate(group, dateValue)}>Remove</button></div></div>)}</div> : <div className="employee-leave-empty"><span className="employee-leave-empty-icon"><Icon name="calendar" size={18} /></span><div><strong>No employee leave today</strong><span>Everyone is scheduled to work today.</span></div></div>}</section>
     <section className="panel checklist-panel"><SectionHeader eyebrow="Calendar" title="National holidays" description="Manage active holiday records used by the non-working-day checklist preview." action={<button className="button button-ghost button-small" type="button" onClick={openHolidayCreate}><Icon name="plus" size={15} />Add holiday</button>} />{holidayError && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{holidayError}</div>}{holidays.length ? <div className="holiday-list">{holidays.map((holiday) => <div className="holiday-row" key={holiday.id}><div><strong>{holiday.name}</strong><span>{formatSelectedDate(holiday.holiday_date)} · {holiday.country}</span></div><span className={`access-pill ${holiday.is_active ? 'active' : 'inactive'}`}><span />{holiday.is_active ? 'Enabled' : 'Disabled'}</span><div className="holiday-actions"><button className="button button-ghost button-small" type="button" onClick={() => openHolidayEdit(holiday)}>Edit</button>{holiday.is_active && <button className="button button-ghost button-small" type="button" onClick={() => disableHoliday(holiday)}>Disable</button>}</div></div>)}</div> : <EmptyState compact icon="calendar" title="No national holidays configured" description="Add a holiday record to make it available to non-working-day previews." action="Add holiday" onAction={openHolidayCreate} />}</section>
     <NationalHolidayModal open={holidayModalOpen} editing={holidayEditing} form={holidayForm} onChange={updateHolidayForm} onClose={closeHolidayModal} onSave={saveHoliday} saving={holidaySaving} error={holidayError} />
+    <EarlierLeaveModal open={earlierLeaveOpen} entries={filteredEarlierLeaveEntries} totalCount={earlierLeaveEntries.length} search={earlierLeaveSearch} fromDate={earlierLeaveFromDate} toDate={earlierLeaveToDate} showAll={showAllEarlierLeave} onSearchChange={(value) => { setEarlierLeaveSearch(value); setShowAllEarlierLeave(false); }} onFromDateChange={(value) => { setEarlierLeaveFromDate(value); setShowAllEarlierLeave(false); }} onToDateChange={(value) => { setEarlierLeaveToDate(value); setShowAllEarlierLeave(false); }} onClearFilters={() => { setEarlierLeaveSearch(''); setEarlierLeaveFromDate(''); setEarlierLeaveToDate(''); setShowAllEarlierLeave(false); }} onViewAll={() => setShowAllEarlierLeave(true)} onEdit={editEmployeeLeaveFromHistory} onRemove={removeConfiguredLeaveDate} onClose={closeEarlierLeave} />
     <EmployeeLeaveModal open={employeeLeaveModalOpen} leaveWorkingEmployees={employees.filter((item) => item.active)} leaveEmployeeId={leaveEmployeeId} onLeaveEmployeeChange={setLeaveEmployeeId} leaveDates={leaveDates} leaveDateInput={leaveDateInput} onLeaveDateInputChange={(event) => setLeaveDateInput(event.target.value)} onAddLeaveDate={() => addDate(setLeaveDates, leaveDateInput, setLeaveDateInput)} onRemoveLeaveDate={removeLeaveDate} onSave={saveEmployeeLeave} saving={leaveSaving} error={error} onClose={closeEmployeeLeaveModal} />
   </>;
 }
