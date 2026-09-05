@@ -3,7 +3,7 @@ import { Icon } from './Icons';
 import { formatTaskDeadline, getTaskStatus } from '../lib/task-data';
 
 export const statusMeta = {
-  pending: { label: 'Pending', tone: 'blue', icon: 'clock' },
+  pending: { label: 'Pending', tone: 'purple', icon: 'clock' },
   overdue: { label: 'Overdue', tone: 'red', icon: 'warning' },
   completed: { label: 'Completed', tone: 'green', icon: 'checkCircle' },
   deactivated: { label: 'Deactivated', tone: 'slate', icon: 'close' },
