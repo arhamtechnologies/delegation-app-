@@ -1,6 +1,6 @@
 import { createSupabaseAdminClient, createSupabaseUserClient, getBearerToken } from '../../../../lib/supabase-server';
 import { getChecklistBusinessDate, isChecklistDueOnDate, localDateTimeToIso } from '../../../../lib/checklist-time';
-import { isSunday } from '../../../../lib/checklist-non-working-day';
+import { isSunday, reconcileOpenChecklistItemsForNonWorkingDays } from '../../../../lib/checklist-non-working-day';
 
 const managerRoles = new Set(['super_admin', 'assigner', 'ea']);
 const timeZone = process.env.CHECKLIST_TIMEZONE || 'Asia/Kolkata';
@@ -61,16 +61,7 @@ async function generate() {
     created = data?.length || 0;
   }
 
-  const { error: sundayError } = await admin.rpc('deactivate_sunday_checklist_items');
-  if (sundayError) throw sundayError;
-
-  const { data: overdueItems, error: overdueError } = await admin
-    .from('checklist_items')
-    .update({ status: 'overdue' })
-    .eq('status', 'pending')
-    .lt('due_at', new Date().toISOString())
-    .select('id');
-  if (overdueError) throw overdueError;
+  const reconciliation = await reconcileOpenChecklistItemsForNonWorkingDays(admin);
 
   return {
     date: today,
@@ -78,7 +69,8 @@ async function generate() {
     due: rows.length,
     created,
     skipped: Math.max(rows.length - created, 0),
-    markedOverdue: overdueItems?.length || 0,
+    deactivatedNonWorkingDayItems: reconciliation.deactivated,
+    markedOverdue: reconciliation.markedOverdue,
   };
 }
 
@@ -89,8 +81,8 @@ async function handler(request) {
     return Response.json({ success: true, ok: true, ...(await generate()) });
   } catch (error) {
     console.error('Checklist generation failed.', { code: error.code, message: error.message });
-    if (/(due_at|due_time|monthly_days|checklist_items|checklist_templates|deactivate_sunday_checklist_items)/i.test(error.message || '') && /(column|relation|schema cache|does not exist)/i.test(error.message || '')) {
-      if (/deactivate_sunday_checklist_items/i.test(error.message || '')) return responseError('Checklist migration checklist_direct_non_working_days.sql is not applied.', 500);
+    if (/(due_at|due_time|monthly_days|checklist_items|checklist_templates|national_holidays|employee_non_working_days)/i.test(error.message || '') && /(column|relation|schema cache|does not exist)/i.test(error.message || '')) {
+      if (/(national_holidays|employee_non_working_days)/i.test(error.message || '')) return responseError('Checklist migration checklist_direct_non_working_days.sql is not applied.', 500);
       return responseError(/monthly_days/i.test(error.message || '') ? 'Checklist database migration 006_checklist_monthly_days.sql is not applied.' : 'Checklist database migration 004_checklist_due_time.sql is not applied.', 500);
     }
     return responseError('Checklist generation failed. Check the server logs for the database error.', 500);

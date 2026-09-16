@@ -22,10 +22,28 @@ function holidayErrorResponse(error, fallbackMessage) {
   return checklistApiError(validationError ? error.message : formatNonWorkingDayError(error) || fallbackMessage, validationError ? 400 : 500);
 }
 
-async function applyRetroactiveHolidayDeactivation(admin, date, actor) {
-  const preview = await getNonWorkingDayPreview(admin, date);
+async function applyRetroactiveHolidayDeactivation(admin, holiday, actor) {
+  const preview = await getNonWorkingDayPreview(admin, holiday.holiday_date);
   if (!preview.isNationalHoliday) return { deactivatedCount: 0, notificationsQueued: 0, operationId: null };
+  const statusCounts = preview.items.reduce((counts, item) => {
+    counts[item.status] = (counts[item.status] || 0) + 1;
+    return counts;
+  }, {});
+  console.info('Applying national holiday to open checklist occurrences.', {
+    holidayId: holiday.id,
+    holidayDate: holiday.holiday_date,
+    matchingOccurrences: preview.eligibleCount,
+    pendingOccurrences: statusCounts.pending || 0,
+    overdueOccurrences: statusCounts.overdue || 0,
+  });
   const result = await deactivateNonWorkingDayItems(admin, preview, actor);
+  console.info('National holiday checklist processing completed.', {
+    holidayId: holiday.id,
+    holidayDate: holiday.holiday_date,
+    matchedOccurrences: result.matchedCount,
+    deactivatedOccurrences: result.deactivated.length,
+    operationId: result.operationId,
+  });
   return {
     deactivatedCount: result.deactivated.length,
     notificationsQueued: result.notificationsQueued,
@@ -53,7 +71,7 @@ export async function POST(request) {
     const { data, error } = await authorization.admin.from('national_holidays').insert(holiday).select('id,holiday_date,name,country,is_active,created_at,updated_at').single();
     if (error) return checklistApiError('The national holiday could not be added.', 500);
     const deactivation = holiday.is_active
-      ? await applyRetroactiveHolidayDeactivation(authorization.admin, holiday.holiday_date, authorization.employee)
+      ? await applyRetroactiveHolidayDeactivation(authorization.admin, data, authorization.employee)
       : { deactivatedCount: 0, notificationsQueued: 0, operationId: null };
     return Response.json({ success: true, holiday: data, ...deactivation });
   } catch (error) {
@@ -78,7 +96,7 @@ export async function PATCH(request) {
     if (error) return checklistApiError('The national holiday could not be updated.', 500);
     const shouldApplyDeactivation = holiday.is_active && (!previous.is_active || previous.holiday_date !== holiday.holiday_date);
     const deactivation = shouldApplyDeactivation
-      ? await applyRetroactiveHolidayDeactivation(authorization.admin, holiday.holiday_date, authorization.employee)
+      ? await applyRetroactiveHolidayDeactivation(authorization.admin, data, authorization.employee)
       : { deactivatedCount: 0, notificationsQueued: 0, operationId: null };
     return Response.json({ success: true, holiday: data, ...deactivation });
   } catch (error) {
