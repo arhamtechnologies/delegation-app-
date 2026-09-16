@@ -6,9 +6,9 @@ import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import { EmptyState, MetricCard, PriorityBadge, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { formatChecklistDueAt, getChecklistDashboardData } from '../../lib/checklist-data';
-import { formatTaskDeadline, getTaskDashboardData, getTaskEmployees } from '../../lib/task-data';
-import { getTodaysWorkItems, getWorkItemStatus, sortTodaysWorkItems, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
+import { formatChecklistDueAt } from '../../lib/checklist-data';
+import { formatTaskDeadline, getTaskEmployees } from '../../lib/task-data';
+import { getTodaysWorkItems, getUnifiedDashboardData, getWorkItemStatus, sortTodaysWorkItems } from '../../lib/work-data';
 
 function MetricSkeleton() {
   return <div className="metric-card metric-card-loading" aria-hidden="true"><div className="metric-card-top"><span className="metric-icon skeleton-shimmer" /></div><div className="metric-value"><span className="metric-value-placeholder skeleton-shimmer" /></div><div className="metric-label"><span className="metric-label-placeholder skeleton-shimmer" /></div></div>;
@@ -68,40 +68,26 @@ export default function Dashboard() {
     const employeeRequest = canCreateTasks(employee.role)
       ? getTaskEmployees()
       : Promise.resolve({ data: [employee], error: null });
-    const [taskResponse, checklistResponse, employeeResponse] = await Promise.all([
-      getTaskDashboardData(),
-      getChecklistDashboardData(),
+    const [workResponse, employeeResponse] = await Promise.all([
+      getUnifiedDashboardData(),
       employeeRequest,
     ]);
 
-    if (taskResponse.error) {
-      setError(taskResponse.error.message || 'Unable to load dashboard data. Please try again.');
+    if (workResponse.error) {
+      setError(workResponse.error.message || 'Unable to load dashboard data. Please try again.');
       setLoading(false);
       return;
     }
 
-    const checklistItems = checklistResponse.data?.todayItems || [];
-    if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
     if (employeeResponse.error) setError(employeeResponse.error.message || 'Employees could not be loaded.');
-    const workItems = [
-      ...(taskResponse.data?.todayTasks || []).map(toTaskWorkItem),
-      ...checklistItems.map(toChecklistWorkItem),
-    ];
     const now = new Date();
-    const taskMetrics = taskResponse.data?.metrics || {};
-    const checklistMetrics = checklistResponse.data?.metrics || {};
 
     setDashboardData({
       name: employee.name,
       role: employee.role,
       employees: employeeResponse.data || [],
-      metrics: {
-        total: (taskMetrics.total || 0) + (checklistMetrics.total || 0),
-        pending: (taskMetrics.pending || 0) + (checklistMetrics.pending || 0),
-        overdue: (taskMetrics.overdue || 0) + (checklistMetrics.overdue || 0),
-        completed: (taskMetrics.completed || 0) + (checklistMetrics.completed || 0),
-      },
-      todayTasks: getTodaysWorkItems(workItems, now),
+      metrics: workResponse.data?.metrics || {},
+      todayTasks: getTodaysWorkItems(workResponse.data?.todayItems || [], now),
     });
     setLoading(false);
   }

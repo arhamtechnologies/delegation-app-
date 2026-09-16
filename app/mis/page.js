@@ -9,9 +9,8 @@ import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
 import { formatChecklistDueAt, getChecklistTimeZone } from '../../lib/checklist-data';
 import { getNextBusinessDate, localDateTimeToIso } from '../../lib/checklist-time';
 import { getTaskAssignees } from '../../lib/task-data';
-import { buildWorkEmployeePerformanceRows, getOverallWorkItems, getWorkItemScheduledDate, getWorkItemStatus, isWorkItemCompletedOnTime, sortWorkItemsChronologically } from '../../lib/work-data';
+import { buildWorkEmployeePerformanceRows, filterWorkItems, getUnifiedWorkItems, getWorkItemStatus, getWorkSummary, isWorkItemCompletedOnTime, sortWorkItemsChronologically } from '../../lib/work-data';
 
-const MIS_LIMIT = 1000;
 const reportStatuses = [
   ['Pending', 'pending', 'blue'],
   ['Overdue', 'overdue', 'orange'],
@@ -104,8 +103,7 @@ export default function MIS() {
     const manager = canCreateTasks(employee.role);
     const selectedEmployeeId = manager ? undefined : employee.id;
     const range = getDateRange(from, to, getChecklistTimeZone());
-    const response = await getOverallWorkItems({
-      limit: MIS_LIMIT,
+    const response = await getUnifiedWorkItems({
       employeeId: selectedEmployeeId,
       status,
       workType,
@@ -139,8 +137,7 @@ export default function MIS() {
       setDetailLoading(true);
       setDetailError('');
       const range = getDateRange(from, to, getChecklistTimeZone());
-      const response = await getOverallWorkItems({
-        limit: MIS_LIMIT,
+      const response = await getUnifiedWorkItems({
         employeeId: employeeFilter,
         status,
         workType,
@@ -162,18 +159,8 @@ export default function MIS() {
 
   const baseFilteredWorkItems = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const timeZone = getChecklistTimeZone();
-    return sortWorkItemsChronologically(workItems.filter((workItem) => {
-      const itemStatus = getWorkItemStatus(workItem);
-      const itemType = workItem.kind === 'checklist' ? 'checklist' : 'task';
-      const scheduledDate = getWorkItemScheduledDate(workItem, timeZone);
-      const matchesSearch = !query || getSearchText(workItem).includes(query);
-      const matchesType = workType === 'all' || itemType === workType;
-      const matchesStatus = status === 'all' || itemStatus === status;
-      const matchesFrom = !from || scheduledDate >= from;
-      const matchesTo = !to || scheduledDate <= to;
-      return matchesSearch && matchesType && matchesStatus && matchesFrom && matchesTo && itemStatus !== 'deactivated';
-    }));
+    const filtered = filterWorkItems(workItems, { workType, status, from, to, timeZone: getChecklistTimeZone() });
+    return sortWorkItemsChronologically(filtered.filter((workItem) => !query || getSearchText(workItem).includes(query)));
   }, [from, search, status, to, workItems, workType]);
 
   const filteredWorkItems = useMemo(() => {
@@ -184,27 +171,14 @@ export default function MIS() {
   const filteredDetailWorkItems = useMemo(() => {
     if (employeeFilter === 'all') return [];
     const query = search.trim().toLowerCase();
-    const timeZone = getChecklistTimeZone();
-    return sortWorkItemsChronologically(detailWorkItems.filter((workItem) => {
-      const itemStatus = getWorkItemStatus(workItem);
-      const itemType = workItem.kind === 'checklist' ? 'checklist' : 'task';
-      const scheduledDate = getWorkItemScheduledDate(workItem, timeZone);
-      const matchesSearch = !query || getSearchText(workItem).includes(query);
-      const matchesEmployee = workItem.employeeId === employeeFilter;
-      const matchesType = workType === 'all' || itemType === workType;
-      const matchesStatus = status === 'all' || itemStatus === status;
-      const matchesFrom = !from || scheduledDate >= from;
-      const matchesTo = !to || scheduledDate <= to;
-      return matchesSearch && matchesEmployee && matchesType && matchesStatus && matchesFrom && matchesTo && itemStatus !== 'deactivated';
-    }));
+    const filtered = filterWorkItems(detailWorkItems, { employeeId: employeeFilter, workType, status, from, to, timeZone: getChecklistTimeZone() });
+    return sortWorkItemsChronologically(filtered.filter((workItem) => !query || getSearchText(workItem).includes(query)));
   }, [detailWorkItems, employeeFilter, from, search, status, to, workType]);
 
   const employeeRows = useMemo(() => buildWorkEmployeePerformanceRows(employees, baseFilteredWorkItems).filter((row) => row.total_work > 0), [baseFilteredWorkItems, employees]);
   const counts = useMemo(() => {
-    const summary = { total: filteredWorkItems.length, pending: 0, overdue: 0, completed: 0, onTime: 0, tasks: 0, checklist: 0 };
+    const summary = { ...getWorkSummary(filteredWorkItems), onTime: 0, tasks: 0, checklist: 0 };
     filteredWorkItems.forEach((workItem) => {
-      const itemStatus = getWorkItemStatus(workItem);
-      if (itemStatus === 'pending' || itemStatus === 'overdue' || itemStatus === 'completed') summary[itemStatus] += 1;
       if (workItem.kind === 'checklist') summary.checklist += 1;
       else summary.tasks += 1;
       if (isWorkItemCompletedOnTime(workItem)) summary.onTime += 1;

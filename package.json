@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test": "node tests/work-summary.test.mjs",
     "start": "next start",
     "lint": "eslint app components lib next.config.mjs eslint.config.mjs --max-warnings=0"
   },

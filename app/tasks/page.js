@@ -7,10 +7,10 @@ import { Icon } from '../../components/Icons';
 import TaskTextTooltip from '../../components/TaskTextTooltip';
 import { EmptyState, Modal, PriorityBadge, SectionHeader, StatusBadge } from '../../components/UI';
 import { canCreateTasks, getAccessToken, getCurrentEmployee } from '../../lib/auth';
-import { canCompleteChecklist, formatChecklistDueAt, getChecklistItems, getChecklistTimeZone, setChecklistCompletion } from '../../lib/checklist-data';
+import { canCompleteChecklist, formatChecklistDueAt, getChecklistTimeZone, setChecklistCompletion } from '../../lib/checklist-data';
 import { getNextBusinessDate, localDateTimeToIso } from '../../lib/checklist-time';
-import { createTask, formatTaskDeadline, getTaskEmployees, getTasks } from '../../lib/task-data';
-import { getWorkItemScheduledDate, getWorkItemStatus, sortWorkItemsChronologically, toChecklistWorkItem, toTaskWorkItem } from '../../lib/work-data';
+import { createTask, formatTaskDeadline, getTaskEmployees } from '../../lib/task-data';
+import { getUnifiedWorkItems, getWorkItemScheduledDate, getWorkItemStatus, getWorkSummary, sortWorkItemsChronologically } from '../../lib/work-data';
 
 const emptyForm = { title: '', description: '', assignee_id: '', eta: '', due_time: '', start_date: '', priority: 'normal', category: 'General', instructions: '', proof_required: true, completion_notes: null, attachments: [] };
 
@@ -106,18 +106,20 @@ export default function Tasks() {
     const employeeRequest = manager
       ? getTaskEmployees()
       : Promise.resolve({ data: [employee], error: null });
-    const taskRequest = selectedWorkType === 'checklist'
-      ? Promise.resolve({ data: [], error: null })
-      : getTasks({ limit: 200, assigneeId: selectedEmployeeId || undefined, status: selectedStatus === 'all' ? undefined : selectedStatus, priority: selectedPriority, ...dateRange });
-    const checklistRequest = selectedWorkType === 'task' || (selectedPriority !== 'all' && selectedPriority !== 'normal')
-      ? Promise.resolve({ data: [], error: null })
-      : getChecklistItems({ limit: 500, dueDate: selectedDate || undefined, employeeId: selectedEmployeeId || (!manager ? employee.id : null), status: selectedStatus === 'all' ? undefined : selectedStatus });
-    const [taskResponse, checklistResponse, employeeResponse] = await Promise.all([
-      taskRequest,
-      checklistRequest,
+    const [workResponse, employeeResponse] = await Promise.all([
+      getUnifiedWorkItems({
+        employeeId: selectedEmployeeId || (!manager ? employee.id : undefined),
+        status: selectedStatus,
+        workType: selectedWorkType,
+        priority: selectedPriority,
+        dueDate: selectedDate || undefined,
+        from: dateRange.etaFrom,
+        to: dateRange.etaTo,
+        detail: 'list',
+      }),
       employeeRequest,
     ]);
-    const responseError = taskResponse.error || employeeResponse.error;
+    const responseError = workResponse.error || employeeResponse.error;
     if (responseError) {
       setError(responseError.message || 'Unable to load tasks. Please try again.');
       setLoading(false);
@@ -126,11 +128,9 @@ export default function Tasks() {
     setTaskData({
       role: employee.role,
       employeeId: employee.id,
-      tasks: (taskResponse.data || []).map(toTaskWorkItem),
-      checklistItems: (checklistResponse.data || []).map(toChecklistWorkItem),
+      workItems: workResponse.data || [],
       employees: employeeResponse.data || [],
     });
-    if (checklistResponse.error) setError(checklistResponse.error.message || 'Checklist items could not be loaded.');
     setLoading(false);
   }, [dateFilter, employeeFilter, priority, status, workType]);
 
@@ -140,10 +140,8 @@ export default function Tasks() {
     if (taskData && !loading && canCreateTasks(taskData.role) && new URLSearchParams(window.location.search).get('create') === '1') openCreateModal();
   }, [loading, taskData]);
 
-  const workItems = useMemo(() => [
-    ...(taskData?.tasks || []),
-    ...(taskData?.checklistItems || []),
-  ], [taskData]);
+  const workItems = useMemo(() => taskData?.workItems || [], [taskData]);
+  const workSummary = useMemo(() => getWorkSummary(workItems), [workItems]);
   const employees = useMemo(() => taskData?.employees || [], [taskData]);
   const canCreate = Boolean(taskData && canCreateTasks(taskData.role));
 
@@ -253,7 +251,7 @@ export default function Tasks() {
   }
 
   return <AppShell title={taskData ? 'Tasks' : 'Loading tasks'} eyebrow="Workspace / Tasks" description="Create, prioritize, and keep every assignment moving." actions={canCreate ? <button className="button button-primary" type="button" onClick={openCreateModal}><Icon name="plus" size={17} />Create task</button> : null}>
-    {taskData && !canCreate && <section className="task-summary-row"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="clipboard" size={16} /></span><div><strong>{workItems.length}</strong><span>Total tasks</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'overdue').length}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="clock" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'pending').length}</strong><span>Pending</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{workItems.filter((workItem) => getWorkItemStatus(workItem) === 'completed').length}</strong><span>Completed</span></div></div></section>}
+    {taskData && !canCreate && <section className="task-summary-row"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="clipboard" size={16} /></span><div><strong>{workSummary.total}</strong><span>Total tasks</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{workSummary.overdue}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="clock" size={16} /></span><div><strong>{workSummary.pending}</strong><span>Pending</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{workSummary.completed}</strong><span>Completed</span></div></div></section>}
     {message && <div className="inline-alert success"><Icon name="checkCircle" size={16} />{message}</div>}
     {error && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
     <section className="panel task-panel">
