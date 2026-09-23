@@ -1,4 +1,5 @@
 import { authorizeNonWorkingDayManager, checklistApiError } from '../../../../lib/checklist-server';
+import { getSavedLeaveDates } from '../../../../lib/calendar-leave.mjs';
 import { createServerNotifications } from '../../../../lib/notifications-server';
 import { deactivateNonWorkingDayItems, formatNonWorkingDayError, getNonWorkingDayPreview, isValidChecklistDate, restoreChecklistItemsAfterEmployeeLeaveRemoval } from '../../../../lib/checklist-non-working-day';
 
@@ -84,20 +85,22 @@ export async function POST(request) {
       if (!uuidPattern.test(payload?.employee_id || '')) throw new Error('Choose an active employee.');
       const { data: employee, error: employeeError } = await authorization.admin.from('employees').select('id,name,active').eq('id', payload.employee_id).maybeSingle();
       if (employeeError || !employee || employee.active === false) throw new Error('Choose an active employee.');
-      const previousEmployeeId = payload.previous_employee_id && payload.previous_employee_id !== payload.employee_id && uuidPattern.test(payload.previous_employee_id) ? payload.previous_employee_id : null;
+      const isEditing = uuidPattern.test(payload.previous_employee_id || '');
+      const previousEmployeeId = isEditing && payload.previous_employee_id !== payload.employee_id ? payload.previous_employee_id : null;
       const employeeIds = [...new Set([payload.employee_id, ...(previousEmployeeId ? [previousEmployeeId] : [])])];
       const existingLeaveDates = await getExistingLeaveDates(authorization.admin, employeeIds);
       if (previousEmployeeId) {
         const { error: clearPreviousError } = await authorization.admin.rpc('save_employee_non_working_dates', { p_employee_id: payload.previous_employee_id, p_dates: [], p_created_by: authorization.user.id });
         if (clearPreviousError) throw clearPreviousError;
       }
-      const { error } = await authorization.admin.rpc('save_employee_non_working_dates', { p_employee_id: payload.employee_id, p_dates: dates, p_created_by: authorization.user.id });
+      const datesToSave = getSavedLeaveDates(existingLeaveDates.get(payload.employee_id), dates, { editing: isEditing });
+      const { error } = await authorization.admin.rpc('save_employee_non_working_dates', { p_employee_id: payload.employee_id, p_dates: datesToSave, p_created_by: authorization.user.id });
       if (error) throw error;
-      const requestedDates = new Set(dates);
+      const savedDates = new Set(datesToSave);
       const datesToRestore = [];
       employeeIds.forEach((employeeId) => {
         (existingLeaveDates.get(employeeId) || []).forEach((date) => {
-          if (employeeId !== payload.employee_id || !requestedDates.has(date)) datesToRestore.push([employeeId, date]);
+          if (employeeId !== payload.employee_id || !savedDates.has(date)) datesToRestore.push([employeeId, date]);
         });
       });
       const restoredCount = (await Promise.all(datesToRestore.map(([employeeId, date]) => restoreChecklistItemsAfterEmployeeLeaveRemoval(authorization.admin, employeeId, date)))).reduce((total, count) => total + count, 0);

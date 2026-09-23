@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { Icon } from './Icons';
 import { EmptyState, Modal, SectionHeader } from './UI';
 import { getAccessToken, getCurrentEmployee } from '../lib/auth';
+import { classifyEmployeeLeave } from '../lib/calendar-leave.mjs';
 import { canDeactivateNonWorkingDayTasks, formatEmployeeId } from '../lib/checklist-data';
-import { defaultChecklistTimeZone, getChecklistBusinessDate } from '../lib/checklist-time';
+import { defaultChecklistTimeZone, getChecklistBusinessDate, getTodayInIndia } from '../lib/checklist-time';
 import { supabaseBrowser } from '../lib/supabase-browser';
 
 function formatSelectedDate(value) {
@@ -21,10 +22,6 @@ function getEmployeeInitials(name) {
   if (!words.length) return '—';
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return `${words[0][0]}${words[1][0]}`.toUpperCase();
-}
-
-function getEmployeeLeaveEntries(groups, predicate = () => true) {
-  return groups.flatMap((group) => group.dates.filter(predicate).map((dateValue) => ({ group, dateValue, employeeName: getEmployeeName(group) })));
 }
 
 function sortTodayLeaveEntries(entries) {
@@ -194,9 +191,11 @@ export default function CalendarSettings() {
 
   if (loading) return <section className="panel checklist-loading"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></section>;
   if (!employee || !canDeactivateNonWorkingDayTasks(employee.role)) return <section className="panel"><EmptyState icon="calendar" title="Calendar settings unavailable" description="You do not have permission to manage workspace calendars." /></section>;
-  const today = getChecklistBusinessDate(new Date(), defaultChecklistTimeZone);
-  const todayLeaveEntries = sortTodayLeaveEntries(getEmployeeLeaveEntries(employeeLeave, (dateValue) => dateValue === today));
-  const earlierLeaveEntries = sortEarlierLeaveEntries(getEmployeeLeaveEntries(employeeLeave, (dateValue) => dateValue < today));
+  const today = getTodayInIndia();
+  const classifiedLeave = classifyEmployeeLeave(employeeLeave, today);
+  const withEmployeeName = (entries) => entries.map((entry) => ({ ...entry, employeeName: getEmployeeName(entry.group) }));
+  const todayLeaveEntries = sortTodayLeaveEntries(withEmployeeName(classifiedLeave.today));
+  const earlierLeaveEntries = sortEarlierLeaveEntries(withEmployeeName(classifiedLeave.earlier));
   const normalizedEarlierSearch = earlierLeaveSearch.trim().toLocaleLowerCase();
   const filteredEarlierLeaveEntries = earlierLeaveEntries.filter(({ employeeName, dateValue }) => {
     const matchesSearch = !normalizedEarlierSearch || employeeName.toLocaleLowerCase().includes(normalizedEarlierSearch);
