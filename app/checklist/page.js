@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
 import TaskTextTooltip from '../../components/TaskTextTooltip';
 import { EmptyState, Modal, SectionHeader, StatusBadge } from '../../components/UI';
 import { getAccessToken, getCurrentEmployee } from '../../lib/auth';
-import { canManageChecklists, checklistFrequencies, checklistWeekdays, formatChecklistDays, formatChecklistTime, formatEmployeeId, getBusinessDate, getChecklistDashboardData, getChecklistSchemaError, getChecklistStatus, setChecklistCompletion, triggerChecklistGeneration } from '../../lib/checklist-data';
+import { canManageChecklists, checklistFrequencies, checklistWeekdays, formatChecklistDays, formatChecklistTime, formatEmployeeId, getBusinessDate, getChecklistDashboardData, getChecklistSchemaError, getChecklistStatus, getChecklistTemplatesPage, setChecklistCompletion, triggerChecklistGeneration } from '../../lib/checklist-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
+import { getPageCount, WORK_PAGE_SIZE } from '../../lib/work-list.mjs';
 
 const emptyForm = { employee_id: '', task: '', frequency: 'daily', weekday: '1', monthly_days: ['1'], start_date: '', due_time: '17:00', day_of_month: '1', active: true };
 const emptyBulkValues = { employee_id: '', task: '', frequency: 'daily', weekday: '1', monthly_days: ['1'], start_date: '', due_time: '17:00', active: true };
@@ -70,9 +71,12 @@ export default function Checklist() {
   const [bulkReview, setBulkReview] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [templateSearch, setTemplateSearch] = useState('');
+  const [debouncedTemplateSearch, setDebouncedTemplateSearch] = useState('');
   const [templateEmployeeFilter, setTemplateEmployeeFilter] = useState('all');
   const [templateFrequencyFilter, setTemplateFrequencyFilter] = useState('all');
   const [templateStatusFilter, setTemplateStatusFilter] = useState('all');
+  const [templatePage, setTemplatePage] = useState(0);
+  const [templateTotal, setTemplateTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -80,6 +84,16 @@ export default function Checklist() {
   const [completing, setCompleting] = useState(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const templateRequestRef = useRef(0);
+  const templateQueryKeyRef = useRef('');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedTemplateSearch(templateSearch.trim());
+      setTemplatePage(0);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [templateSearch]);
 
   async function load() {
     setLoading(true);
@@ -91,7 +105,7 @@ export default function Checklist() {
     const generationRequest = manager ? triggerChecklistGeneration() : Promise.resolve(null);
     const supabase = supabaseBrowser();
     const [templateResponse, employeeResponse] = await Promise.all([
-      manager ? supabase.from('checklist_templates').select('id,employee_id,task,frequency,weekday,day_of_month,monthly_days,start_date,due_time,active,created_at,updated_at,employee:employees!checklist_templates_employee_id_fkey(id,name,email)').order('active', { ascending: false }).order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
+      manager ? getChecklistTemplatesPage({ page: templatePage, pageSize: WORK_PAGE_SIZE, search: debouncedTemplateSearch, employeeId: templateEmployeeFilter, frequency: templateFrequencyFilter, status: templateStatusFilter }) : Promise.resolve({ data: [], count: 0, error: null }),
       manager ? supabase.from('employees').select('id,name,email,active,role').order('name') : Promise.resolve({ data: [], error: null }),
     ]);
     const generationResponse = await generationRequest;
@@ -99,11 +113,36 @@ export default function Checklist() {
     const responseError = getChecklistSchemaError(itemResponse.error || templateResponse.error || employeeResponse.error);
     if (responseError) { setError(responseError.message || 'Unable to load checklist data. Please try again.'); setLoading(false); return; }
     setData({ userId: user.id, employee, manager, items: itemResponse.data?.todayItems || [], metrics: itemResponse.data?.metrics || {}, templates: templateResponse.data || [], employees: employeeResponse.data || [] });
+    setTemplateTotal(templateResponse.count || 0);
+    templateQueryKeyRef.current = [templatePage, debouncedTemplateSearch, templateEmployeeFilter, templateFrequencyFilter, templateStatusFilter].join('|');
     if (generationResponse && !generationResponse.success) setError(generationResponse.error || 'Checklist generation failed.');
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  // Initial workspace/bootstrap load; later template filter changes use the bounded effect below.
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!data?.manager || loading) return undefined;
+    const queryKey = [templatePage, debouncedTemplateSearch, templateEmployeeFilter, templateFrequencyFilter, templateStatusFilter].join('|');
+    if (templateQueryKeyRef.current === queryKey) return undefined;
+    templateQueryKeyRef.current = queryKey;
+    const requestId = templateRequestRef.current + 1;
+    templateRequestRef.current = requestId;
+    const controller = new AbortController();
+    async function refreshTemplates() {
+      const response = await getChecklistTemplatesPage({ page: templatePage, pageSize: WORK_PAGE_SIZE, search: debouncedTemplateSearch, employeeId: templateEmployeeFilter, frequency: templateFrequencyFilter, status: templateStatusFilter, includeCount: templatePage === 0, signal: controller.signal });
+      if (controller.signal.aborted || templateRequestRef.current !== requestId) return;
+      if (response.error) {
+        setError(response.error.message || 'Checklist templates could not be loaded.');
+        return;
+      }
+      setData((current) => current ? { ...current, templates: response.data || [] } : current);
+      if (response.count !== null && response.count !== undefined) setTemplateTotal(response.count);
+    }
+    refreshTemplates();
+    return () => controller.abort();
+  }, [data?.manager, debouncedTemplateSearch, loading, templateEmployeeFilter, templateFrequencyFilter, templatePage, templateStatusFilter]);
 
   const today = getBusinessDate();
   const canManage = Boolean(data?.manager);
@@ -111,11 +150,8 @@ export default function Checklist() {
   const templates = useMemo(() => data?.templates || [], [data]);
   const employees = useMemo(() => data?.employees || [], [data]);
   const todayItems = useMemo(() => items.filter((item) => item?.id && item.due_date === today && item.status !== 'deactivated'), [items, today]);
-  const filteredTemplates = useMemo(() => templates.filter((template) => {
-    const query = templateSearch.trim().toLowerCase();
-    const matchesSearch = !query || [template.task, template.employee?.name, template.employee?.email].filter(Boolean).join(' ').toLowerCase().includes(query);
-    return matchesSearch && (templateEmployeeFilter === 'all' || template.employee_id === templateEmployeeFilter) && (templateFrequencyFilter === 'all' || template.frequency === templateFrequencyFilter) && (templateStatusFilter === 'all' || (template.active ? 'active' : 'inactive') === templateStatusFilter);
-  }), [templates, templateSearch, templateEmployeeFilter, templateFrequencyFilter, templateStatusFilter]);
+  const filteredTemplates = templates;
+  const templatePageCount = getPageCount(templateTotal, WORK_PAGE_SIZE);
   const allVisibleSelected = filteredTemplates.length > 0 && filteredTemplates.every((template) => selectedIds.includes(template.id));
 
   function updateForm(field, value) { setForm((current) => ({ ...current, [field]: value })); }
@@ -244,11 +280,11 @@ export default function Checklist() {
     {message && <div className="inline-alert success"><Icon name="checkCircle" size={16} />{message}</div>}
     {error && !modalOpen && !importOpen && !bulkOpen && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
     {loading ? <section className="panel checklist-loading"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></section> : canManage ? <>
-      <section className="task-summary-row checklist-summary"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="list" size={16} /></span><div><strong>{templates.length}</strong><span>Templates</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="calendar" size={16} /></span><div><strong>{todayItems.length}</strong><span>Today&apos;s items</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{data.metrics?.overdue || 0}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{data.metrics?.completed || 0}</strong><span>Completed</span></div></div></section>
+      <section className="task-summary-row checklist-summary"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="list" size={16} /></span><div><strong>{templateTotal}</strong><span>Templates</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="calendar" size={16} /></span><div><strong>{todayItems.length}</strong><span>Today&apos;s items</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{data.metrics?.overdue || 0}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{data.metrics?.completed || 0}</strong><span>Completed</span></div></div></section>
       <section className="panel checklist-panel"><SectionHeader eyebrow="Recurring work" title="Checklist templates" description="Set the recurring rule once. Scheduled items are generated automatically when due." />
-        <div className="filter-bar checklist-template-filters"><label className="search-box"><Icon name="search" size={17} /><input aria-label="Search checklist templates" placeholder="Search employees or tasks" value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} /></label><label className="filter-control"><span>Employee</span><select value={templateEmployeeFilter} onChange={(event) => setTemplateEmployeeFilter(event.target.value)}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label><label className="filter-control"><span>Frequency</span><select value={templateFrequencyFilter} onChange={(event) => setTemplateFrequencyFilter(event.target.value)}><option value="all">All frequencies</option>{checklistFrequencies.map((frequency) => <option value={frequency.value} key={frequency.value}>{frequency.label}</option>)}</select></label><label className="filter-control"><span>Status</span><select value={templateStatusFilter} onChange={(event) => setTemplateStatusFilter(event.target.value)}><option value="all">All status</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div>
+        <div className="filter-bar checklist-template-filters"><label className="search-box"><Icon name="search" size={17} /><input aria-label="Search checklist templates" placeholder="Search employees or tasks" value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} /></label><label className="filter-control"><span>Employee</span><select value={templateEmployeeFilter} onChange={(event) => { setTemplateEmployeeFilter(event.target.value); setTemplatePage(0); }}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label><label className="filter-control"><span>Frequency</span><select value={templateFrequencyFilter} onChange={(event) => { setTemplateFrequencyFilter(event.target.value); setTemplatePage(0); }}><option value="all">All frequencies</option>{checklistFrequencies.map((frequency) => <option value={frequency.value} key={frequency.value}>{frequency.label}</option>)}</select></label><label className="filter-control"><span>Status</span><select value={templateStatusFilter} onChange={(event) => { setTemplateStatusFilter(event.target.value); setTemplatePage(0); }}><option value="all">All status</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div>
         {selectedIds.length > 0 && <div className="checklist-bulk-toolbar"><strong>{selectedIds.length} selected</strong><button className="button button-ghost button-small" type="button" onClick={openBulkEdit}>Edit selected</button><button className="button button-ghost button-small" type="button" onClick={bulkDelete}>Delete selected</button><button className="button button-ghost button-small" type="button" onClick={clearSelection}>Clear selection</button></div>}
-        {templates.length ? <div className="checklist-table-scroll"><div className="checklist-table-heading"><span className="checklist-selection-header"><input type="checkbox" aria-label="Select all visible checklist templates" checked={allVisibleSelected} onChange={toggleVisibleSelection} /></span><span>Employee ID</span><span>Name</span><span>Task</span><span>Days</span><span>Status</span><span /></div><div className="checklist-template-list">{filteredTemplates.map((template) => <div className="checklist-template-row" key={template.id}><span className="checklist-selection"><input type="checkbox" aria-label={`Select ${template.task}`} checked={selectedIds.includes(template.id)} onChange={() => toggleSelected(template.id)} /></span><div className="checklist-employee-id"><strong>{formatEmployeeId(template.employee_id)}</strong><small>{template.employee?.email || 'Workspace employee'}</small></div><strong className="checklist-employee-name">{template.employee?.name || 'Unknown employee'}</strong><TaskTextTooltip text={template.task} className="checklist-task-name" /><span className="checklist-days"><Icon name="calendar" size={14} /><span>{formatChecklistDays(template)}<small>{formatChecklistTime(template.due_time)}</small></span></span><span className={`access-pill ${template.active ? 'active' : 'inactive'}`}><span />{template.active ? 'Active' : 'Inactive'}</span><details className="checklist-actions"><summary aria-label={`Actions for ${template.task}`}><Icon name="more" size={17} /></summary><div className="checklist-actions-menu"><button type="button" onClick={() => openEdit(template)}><Icon name="edit" size={14} />Edit</button><button type="button" onClick={() => deactivate(template)}><Icon name={template.active ? 'close' : 'check'} size={14} />{template.active ? 'Deactivate' : 'Activate'}</button><button type="button" onClick={() => deleteTemplate(template)}><Icon name="close" size={14} />Delete</button></div></details></div>)}</div></div> : <EmptyState icon="checkSquare" title="No checklist tasks yet" description="Create recurring work for your employees to keep daily operations on track." action="Add checklist" onAction={openCreate} />}</section>
+        {templates.length ? <><div className="checklist-table-scroll"><div className="checklist-table-heading"><span className="checklist-selection-header"><input type="checkbox" aria-label="Select all visible checklist templates" checked={allVisibleSelected} onChange={toggleVisibleSelection} /></span><span>Employee ID</span><span>Name</span><span>Task</span><span>Days</span><span>Status</span><span /></div><div className="checklist-template-list">{filteredTemplates.map((template) => <div className="checklist-template-row" key={template.id}><span className="checklist-selection"><input type="checkbox" aria-label={`Select ${template.task}`} checked={selectedIds.includes(template.id)} onChange={() => toggleSelected(template.id)} /></span><div className="checklist-employee-id"><strong>{formatEmployeeId(template.employee_id)}</strong><small>{template.employee?.email || 'Workspace employee'}</small></div><strong className="checklist-employee-name">{template.employee?.name || 'Unknown employee'}</strong><TaskTextTooltip text={template.task} className="checklist-task-name" /><span className="checklist-days"><Icon name="calendar" size={14} /><span>{formatChecklistDays(template)}<small>{formatChecklistTime(template.due_time)}</small></span></span><span className={`access-pill ${template.active ? 'active' : 'inactive'}`}><span />{template.active ? 'Active' : 'Inactive'}</span><details className="checklist-actions"><summary aria-label={`Actions for ${template.task}`}><Icon name="more" size={17} /></summary><div className="checklist-actions-menu"><button type="button" onClick={() => openEdit(template)}><Icon name="edit" size={14} />Edit</button><button type="button" onClick={() => deactivate(template)}><Icon name={template.active ? 'close' : 'check'} size={14} />{template.active ? 'Deactivate' : 'Activate'}</button><button type="button" onClick={() => deleteTemplate(template)}><Icon name="close" size={14} />Delete</button></div></details></div>)}</div></div><div className="task-pagination"><span>{templateTotal} results · Page {templatePage + 1} of {templatePageCount}</span><div><button className="button button-ghost button-small" type="button" onClick={() => setTemplatePage((value) => Math.max(0, value - 1))} disabled={templatePage === 0}>Previous</button><button className="button button-ghost button-small" type="button" onClick={() => setTemplatePage((value) => Math.min(templatePageCount - 1, value + 1))} disabled={templatePage + 1 >= templatePageCount}>Next</button></div></div></> : <EmptyState icon="checkSquare" title="No checklist tasks yet" description="Create recurring work for your employees to keep daily operations on track." action="Add checklist" onAction={openCreate} />}</section>
     </> : <section className="panel checklist-doer-panel"><SectionHeader eyebrow="Today" title="Today&apos;s checklist" description="Complete your recurring work as you finish it. Status is updated automatically." />{todayItems.length ? <div className="checklist-item-list">{todayItems.map((item) => <ChecklistItemCard item={item} key={item.id} onComplete={completeItem} completing={completing === item.id} />)}</div> : <EmptyState icon="checkCircle" title="You&apos;re all caught up" description="No checklist items are due today." />}</section>}
     {canManage && <Modal open={modalOpen} title={editing ? 'Edit checklist' : 'Add checklist'} description="Create a recurring rule for one employee. Generated history stays unchanged when you edit the rule." onClose={closeModal} wide><form className="modal-form" onSubmit={save}><div className="form-grid form-grid-two"><div className="field field-wide"><label htmlFor="checklist-employee">Employee<span>*</span></label><select id="checklist-employee" className="input" required value={form.employee_id} onChange={(event) => updateForm('employee_id', event.target.value)}><option value="">Choose an employee</option>{employees.filter((employee) => employee.active).map((employee) => <option value={employee.id} key={employee.id}>{formatEmployeeId(employee.id)} — {employee.name}</option>)}</select></div><div className="field field-wide"><label htmlFor="checklist-task">Task<span>*</span></label><input id="checklist-task" className="input" required maxLength="240" placeholder="e.g. Check daily sales report" value={form.task} onChange={(event) => updateForm('task', event.target.value)} /></div><div className="field"><label htmlFor="checklist-frequency">Frequency<span>*</span></label><select id="checklist-frequency" className="input" required value={form.frequency} onChange={(event) => updateForm('frequency', event.target.value)}>{checklistFrequencies.map((frequency) => <option value={frequency.value} key={frequency.value}>{frequency.label}</option>)}</select></div><div className="field"><label htmlFor="checklist-start-date">Start/assign date<span>*</span></label><input id="checklist-start-date" className="input" type="date" required value={form.start_date} onChange={(event) => updateForm('start_date', event.target.value)} /></div>{form.frequency === 'weekly' && <div className="field"><label htmlFor="checklist-weekday">Day of week<span>*</span></label><select id="checklist-weekday" className="input" required value={form.weekday} onChange={(event) => updateForm('weekday', event.target.value)}>{checklistWeekdays.map((weekday, index) => <option value={index} key={weekday}>{weekday}</option>)}</select></div>}{form.frequency === 'monthly' && <div className="field"><label htmlFor="checklist-monthly-days">Days of month<span>*</span></label><select id="checklist-monthly-days" className="input" multiple required value={form.monthly_days} onChange={(event) => handleMonthlyDays(event, (days) => setForm((current) => ({ ...current, monthly_days: days })))}>{Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <option value={String(day)} key={day}>{day}</option>)}</select><small className="field-help">Hold Ctrl/Cmd to choose multiple days. Short months use the last available day.</small></div>}<div className="field"><label htmlFor="checklist-due-time">Due time<span>*</span></label><input id="checklist-due-time" className="input" type="time" required value={form.due_time} onChange={(event) => updateForm('due_time', event.target.value)} /></div><label className="checkbox-field field-wide"><input type="checkbox" checked={form.active} onChange={(event) => updateForm('active', event.target.checked)} /><span><strong>Active</strong><small>Deactivate recurring work without deleting its generated history.</small></span></label></div>{error && modalOpen && <div className="form-error"><Icon name="warning" size={16} />{error}</div>}<div className="modal-actions"><button className="button button-ghost" type="button" onClick={closeModal}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Saving...' : editing ? 'Save changes' : 'Add checklist'}{!saving && <Icon name="arrowUpRight" size={16} />}</button></div></form></Modal>}
     <ImportModal open={importOpen} onClose={closeImport} startDate={importStartDate} setStartDate={setImportStartDate} file={importFile} setFile={setImportFile} preview={importPreview} result={importResult} allowDuplicates={importAllowDuplicates} setAllowDuplicates={setImportAllowDuplicates} loading={importLoading} error={error} onPreview={previewImport} onImport={importTasks} onReset={resetImport} />
