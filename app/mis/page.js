@@ -95,25 +95,33 @@ export default function MIS() {
     reportRequestId.current = requestId;
     setLoading(true);
     setError('');
-    const [{ user, employee, error: employeeError }, { data: eligibleEmployees = [], error: employeeListError } = {}] = await Promise.all([
-      getCurrentEmployee(),
-      getTaskAssignees(),
-    ]);
-    if (!user) { setLoading(false); return; }
-    if (employeeError || !employee) {
-      setError('Unable to load your workspace profile. Please try again.');
-      setLoading(false);
-      return;
+    try {
+      const [{ user, employee, error: employeeError }, { data: eligibleEmployees = [], error: employeeListError } = {}] = await Promise.all([
+        getCurrentEmployee(),
+        getTaskAssignees(),
+      ]);
+      if (controller.signal.aborted || reportRequestId.current !== requestId) return;
+      if (!user) return;
+      if (employeeError || !employee) throw employeeError || new Error('Unable to load your workspace profile. Please try again.');
+      if (employeeListError) throw employeeListError;
+      const manager = canCreateTasks(employee.role);
+      const response = await getWorkReport({ workType, status, from, to, search: debouncedSearch, signal: controller.signal });
+      if (controller.signal.aborted || reportRequestId.current !== requestId) return;
+      if (response.error) throw response.error;
+      if (!response.data?.summary || !Array.isArray(response.data.employees)) {
+        throw new Error('The overall work report returned an incomplete response. Please try again.');
+      }
+      setEmployees(manager ? eligibleEmployees : [employee]);
+      setEmployeeRows(response.data.employees);
+      setCounts(response.data.summary);
+    } catch (loadError) {
+      if (!controller.signal.aborted && reportRequestId.current === requestId) {
+        console.error('[mis] report load failed', { message: loadError.message || 'Unknown report loading error' });
+        setError(loadError.message || 'The overall work report could not be loaded.');
+      }
+    } finally {
+      if (!controller.signal.aborted && reportRequestId.current === requestId) setLoading(false);
     }
-    const manager = canCreateTasks(employee.role);
-    const response = await getWorkReport({ workType, status, from, to, search: debouncedSearch, signal: controller.signal });
-    if (controller.signal.aborted || reportRequestId.current !== requestId) return;
-    if (employeeListError) setError(employeeListError.message || 'Employees could not be loaded.');
-    else if (response.error) setError(response.error.message || 'The overall work report could not be loaded.');
-    setEmployees(manager ? eligibleEmployees : [employee]);
-    setEmployeeRows(response.data?.employees || []);
-    setCounts(response.data?.summary || { total: 0, pending: 0, overdue: 0, completed: 0, onTime: 0, tasks: 0, checklist: 0 });
-    setLoading(false);
   }, [debouncedSearch, from, status, to, workType]);
 
   useEffect(() => { load(); }, [load]);

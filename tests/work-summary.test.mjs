@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { filterWorkItems, getUnifiedWorkItemStatus, getWorkSummary } from '../lib/work-summary.mjs';
 import { validateWorkReportPayload } from '../lib/work-list.mjs';
 
@@ -45,4 +46,12 @@ test('16. MIS preserves nonzero task/checklist totals and employee-wise rows fro
   assert.deepEqual(valid.data.employees.map((row) => row.total_work), [3, 1]);
   assert.match(validateWorkReportPayload(null).error.message, /incomplete response/);
   assert.match(validateWorkReportPayload({ summary: { total: 4, pending: 1, overdue: 1, completed: 1, onTime: 0, tasks: 2, checklist: 2 }, employees: [] }).error.message, /inconsistent status totals/);
+});
+
+test('17. MIS loading does not mask RPC failures with zero totals', async () => {
+  const source = await readFile(new URL('../app/mis/page.js', import.meta.url), 'utf8');
+  assert.match(source, /if \(response\.error\) throw response\.error;/);
+  assert.match(source, /if \(!response\.data\?\.summary \|\| !Array\.isArray\(response\.data\.employees\)\)/);
+  assert.doesNotMatch(source, /setCounts\(response\.data\?\.summary \|\| \{ total: 0/);
+  assert.match(source, /console\.error\('\[mis\] report load failed'/);
 });
