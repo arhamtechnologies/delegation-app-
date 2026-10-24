@@ -85,7 +85,7 @@ left join public.employees e on e.id = i.employee_id
 left join public.checklist_templates template on template.id = i.template_id
 where i.status <> 'deactivated';
 
-revoke all on public.work_items from public, anon;
+revoke all on public.work_items from anon;
 grant select on public.work_items to authenticated;
 
 create or replace view public.checklist_template_list
@@ -110,7 +110,7 @@ select
 from public.checklist_templates template
 left join public.employees employee on employee.id = template.employee_id;
 
-revoke all on public.checklist_template_list from public, anon;
+revoke all on public.checklist_template_list from anon;
 grant select on public.checklist_template_list to authenticated;
 
 -- MIS aggregates stay in Postgres instead of transferring every historical row.
