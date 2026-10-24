@@ -132,44 +132,50 @@ export default function Tasks() {
   const taskRole = taskData?.role;
   const taskEmployeeId = taskData?.employeeId;
 
-    const manager = canCreateTasks(employee.role);
-    const selectedEmployeeId = Object.prototype.hasOwnProperty.call(overrides, 'employeeId') ? overrides.employeeId : (employeeFilter === 'all' ? null : employeeFilter);
-    const selectedStatus = overrides.status ?? status;
-    const selectedPriority = overrides.priority ?? priority;
-    const selectedDate = overrides.date ?? dateFilter;
-    const selectedWorkType = overrides.workType ?? workType;
-    const dateRange = selectedDate ? getDateFilterRange(selectedDate) : {};
-    const employeeRequest = manager
-      ? getTaskEmployees()
-      : Promise.resolve({ data: [employee], error: null });
-    const [workResponse, employeeResponse] = await Promise.all([
-      getUnifiedWorkItems({
-        employeeId: selectedEmployeeId || (!manager ? employee.id : undefined),
-        status: selectedStatus,
-        workType: selectedWorkType,
-        priority: selectedPriority,
-        dueDate: selectedDate || undefined,
-        from: dateRange.etaFrom,
-        to: dateRange.etaTo,
-        detail: 'list',
-        followUpOnly: followUpFilter === 'follow-up',
-      }),
-      employeeRequest,
-    ]);
-    const responseError = workResponse.error || employeeResponse.error;
-    if (responseError) {
-      setError(responseError.message || 'Unable to load tasks. Please try again.');
-      setLoading(false);
-      return;
+  const load = useCallback(async () => {
+    if (!filtersReady || !taskRole || !taskEmployeeId) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    if (loadedRef.current) setRefreshing(true);
+    else setLoading(true);
+    setError('');
+    const manager = canCreateTasks(taskRole);
+    const selectedEmployeeId = employeeFilter === 'all' ? (!manager ? taskEmployeeId : null) : employeeFilter;
+    try {
+      const [workResponse, summaryResponse] = await Promise.all([
+        getWorkItemsPage({
+          page,
+          pageSize: WORK_PAGE_SIZE,
+          search: debouncedSearch,
+          employeeId: selectedEmployeeId,
+          workType,
+          status,
+          priority,
+          dueDate: dateFilter,
+          includeCount: page === 0,
+          signal: controller.signal,
+        }),
+        !manager ? getWorkReport({ workType, status, priority, employeeId: selectedEmployeeId, from: dateFilter, to: dateFilter, search: debouncedSearch, signal: controller.signal }) : Promise.resolve({ data: null, error: null }),
+      ]);
+      if (controller.signal.aborted || !isLatestRequest(requestId, requestIdRef.current)) return;
+      const responseError = workResponse.error || summaryResponse.error;
+      if (responseError) throw responseError;
+      setTaskData((current) => ({ ...current, workItems: workResponse.data || [] }));
+      if (workResponse.count !== null && workResponse.count !== undefined) setTotal(workResponse.count);
+      if (summaryResponse.data?.summary) setWorkSummary(summaryResponse.data.summary);
+      loadedRef.current = true;
+    } catch (loadError) {
+      if (!controller.signal.aborted && isLatestRequest(requestId, requestIdRef.current)) setError(loadError.message || 'Unable to load tasks. Please try again.');
+    } finally {
+      if (!controller.signal.aborted && isLatestRequest(requestId, requestIdRef.current)) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-    setTaskData({
-      role: employee.role,
-      employeeId: employee.id,
-      workItems: workResponse.data || [],
-      employees: employeeResponse.data || [],
-    });
-    setLoading(false);
-  }, [dateFilter, employeeFilter, followUpFilter, priority, status, workType]);
+  }, [dateFilter, debouncedSearch, employeeFilter, filtersReady, page, priority, status, taskEmployeeId, taskRole, workType]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -183,21 +189,11 @@ export default function Tasks() {
     if (taskData && !loading && canCreateTasks(taskData.role) && new URLSearchParams(window.location.search).get('create') === '1') openCreateModal();
   }, [loading, taskData]);
 
-  const workItems = useMemo(() => taskData?.workItems || [], [taskData]);
+  const workItems = useMemo(() => (taskData?.workItems || []).filter((workItem) => followUpFilter === 'all' || workItem.isFollowUp), [taskData, followUpFilter]);
   const employees = useMemo(() => taskData?.employees || [], [taskData]);
   const canCreate = Boolean(taskData && canCreateTasks(taskData.role));
 
-  const filteredTasks = useMemo(() => sortWorkItemsChronologically(workItems.filter((workItem) => {
-    const query = search.trim().toLowerCase();
-    const searchable = [workItem.title, workItem.description, workItem.assignee?.name, workItem.category, workItem.checklistItem?.template?.frequency].filter(Boolean).join(' ').toLowerCase();
-    const matchesSearch = !query || searchable.includes(query);
-    const matchesEmployee = employeeFilter === 'all' || workItem.assignee_id === employeeFilter;
-    const matchesWorkType = workType === 'all' || (workType === 'checklist' ? workItem.kind === 'checklist' : workItem.kind !== 'checklist');
-    const matchesFollowUp = followUpFilter === 'all' || workItem.isFollowUp;
-    const matchesDate = !dateFilter || getWorkItemScheduledDate(workItem, getChecklistTimeZone()) === dateFilter;
-    const workStatus = getWorkItemStatus(workItem);
-    return matchesSearch && matchesEmployee && matchesWorkType && matchesFollowUp && matchesDate && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
-  })), [workItems, search, employeeFilter, workType, followUpFilter, status, priority, dateFilter]);
+  const totalPages = getPageCount(total, WORK_PAGE_SIZE);
 
   function updateForm(field, value) { setForm((current) => ({ ...current, [field]: value })); }
 
