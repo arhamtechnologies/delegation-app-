@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { filterWorkItems, getUnifiedWorkItemStatus, getWorkSummary } from '../lib/work-summary.mjs';
+import { validateWorkReportPayload } from '../lib/work-list.mjs';
 
 const now = new Date('2026-09-16T06:30:00.000Z');
 const pendingTask = { id: 'task-pending', kind: 'task', assignee_id: 'employee-a', status: 'pending', eta: '2026-09-16T07:30:00.000Z' };
@@ -35,4 +36,13 @@ test('15. completed checklist history remains completed on a non-working day', (
   const completedSunday = { ...holidayChecklist, status: 'deactivated', due_date: '2026-09-13', completed_at: '2026-09-13T06:00:00.000Z' };
   assert.equal(getUnifiedWorkItemStatus(completedSunday, now), 'completed');
   assert.deepEqual(getWorkSummary([completedSunday], now), { total: 1, pending: 0, overdue: 0, completed: 1 });
+});
+
+test('16. MIS preserves nonzero task/checklist totals and employee-wise rows from the aggregate RPC', () => {
+  const valid = validateWorkReportPayload({ summary: { total: 4, pending: 2, overdue: 1, completed: 1, onTime: 1, tasks: 2, checklist: 2 }, employees: [{ employee_id: 'employee-a', total_work: 3 }, { employee_id: 'employee-b', total_work: 1 }] });
+  assert.equal(valid.error, null);
+  assert.equal(valid.data.summary.total, 4);
+  assert.deepEqual(valid.data.employees.map((row) => row.total_work), [3, 1]);
+  assert.match(validateWorkReportPayload(null).error.message, /incomplete response/);
+  assert.match(validateWorkReportPayload({ summary: { total: 4, pending: 1, overdue: 1, completed: 1, onTime: 0, tasks: 2, checklist: 2 }, employees: [] }).error.message, /inconsistent status totals/);
 });
