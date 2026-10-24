@@ -627,6 +627,17 @@ h1, h2, h3, p { margin-top: 0; }
   font-weight: 750;
 }
 
+.dashboard-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.follow-up-panel { margin-bottom: 20px; }
+.follow-up-table { min-width: 930px; }
+.follow-up-task-type { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
+
+@media (max-width: 720px) {
+  .simple-section-heading { align-items: flex-start; }
+  .dashboard-heading-actions { justify-content: flex-start; }
+  .follow-up-filters .filter-control { flex-basis: 135px; }
+}
+
 .automatic-status-panel {
   display: flex;
   align-items: center;

@@ -35,7 +35,14 @@ function getDateFilterRange(dateValue) {
 }
 
 function getWorkDeadline(workItem) {
+  if (workItem.isFollowUp) return `Original ${formatDateLabel(workItem.originalScheduledDate)} · Follow-up ${formatDateLabel(workItem.followUpDate)}`;
   return workItem.kind === 'checklist' ? formatChecklistDueAt(workItem.due_at) : formatTaskDeadline(workItem);
+}
+
+function formatDateLabel(value) {
+  if (!value) return '—';
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(Date.UTC(year, month - 1, day, 12)));
 }
 
 function getWorkLink(workItem) {
@@ -51,6 +58,7 @@ export default function Tasks() {
   const [workType, setWorkType] = useState('all');
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
+  const [followUpFilter, setFollowUpFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
   const [filtersReady, setFiltersReady] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -67,10 +75,12 @@ export default function Tasks() {
       const priorityValue = params.get('priority');
       const dateValue = params.get('date');
       const workTypeValue = params.get('workType');
+      const followUpValue = params.get('followUp');
       setEmployeeFilter(params.get('employee') || 'all');
       setWorkType(['task', 'checklist'].includes(workTypeValue) ? workTypeValue : 'all');
       setStatus(['pending', 'overdue', 'completed'].includes(statusValue) ? statusValue : 'all');
       setPriority(['critical', 'high', 'normal'].includes(priorityValue) ? priorityValue : 'all');
+      setFollowUpFilter(followUpValue === '1' ? 'follow-up' : 'all');
       setDateFilter(isValidDateFilter(dateValue) ? dateValue : '');
     }
 
@@ -116,6 +126,7 @@ export default function Tasks() {
         from: dateRange.etaFrom,
         to: dateRange.etaTo,
         detail: 'list',
+        followUpOnly: followUpFilter === 'follow-up',
       }),
       employeeRequest,
     ]);
@@ -132,7 +143,7 @@ export default function Tasks() {
       employees: employeeResponse.data || [],
     });
     setLoading(false);
-  }, [dateFilter, employeeFilter, priority, status, workType]);
+  }, [dateFilter, employeeFilter, followUpFilter, priority, status, workType]);
 
   useEffect(() => { if (filtersReady) load(); }, [filtersReady, load]);
 
@@ -151,10 +162,11 @@ export default function Tasks() {
     const matchesSearch = !query || searchable.includes(query);
     const matchesEmployee = employeeFilter === 'all' || workItem.assignee_id === employeeFilter;
     const matchesWorkType = workType === 'all' || (workType === 'checklist' ? workItem.kind === 'checklist' : workItem.kind !== 'checklist');
+    const matchesFollowUp = followUpFilter === 'all' || workItem.isFollowUp;
     const matchesDate = !dateFilter || getWorkItemScheduledDate(workItem, getChecklistTimeZone()) === dateFilter;
     const workStatus = getWorkItemStatus(workItem);
-    return matchesSearch && matchesEmployee && matchesWorkType && matchesDate && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
-  })), [workItems, search, employeeFilter, workType, status, priority, dateFilter]);
+    return matchesSearch && matchesEmployee && matchesWorkType && matchesFollowUp && matchesDate && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
+  })), [workItems, search, employeeFilter, workType, followUpFilter, status, priority, dateFilter]);
 
   function updateForm(field, value) { setForm((current) => ({ ...current, [field]: value })); }
 
@@ -219,6 +231,12 @@ export default function Tasks() {
     updateFilterUrl('priority', nextPriority);
   }
 
+  function updateFollowUpFilter(nextFollowUp) {
+    const normalizedFollowUp = nextFollowUp === 'follow-up' ? 'follow-up' : 'all';
+    setFollowUpFilter(normalizedFollowUp);
+    updateFilterUrl('followUp', normalizedFollowUp === 'follow-up' ? '1' : 'all');
+  }
+
   function updateDateFilter(nextDate) {
     const normalizedDate = isValidDateFilter(nextDate) ? nextDate : '';
     setDateFilter(normalizedDate);
@@ -238,6 +256,7 @@ export default function Tasks() {
     setEmployeeFilter('all');
     setWorkType('all');
     setPriority('all');
+    setFollowUpFilter('all');
     setStatus('all');
     setDateFilter('');
     const params = new URLSearchParams(window.location.search);
@@ -245,6 +264,7 @@ export default function Tasks() {
     params.delete('workType');
     params.delete('status');
     params.delete('priority');
+    params.delete('followUp');
     params.delete('date');
     const query = params.toString();
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
@@ -266,6 +286,7 @@ export default function Tasks() {
         </div></div>
         <label className="filter-control"><span>Date</span><input type="date" value={dateFilter} onChange={(event) => updateDateFilter(event.target.value)} disabled={!taskData} /></label>
         <label className="filter-control"><span>Status</span><select value={status} onChange={(event) => updateStatusFilter(event.target.value)} disabled={!taskData}><option value="all">All status</option><option value="pending">Pending</option><option value="overdue">Overdue</option><option value="completed">Completed</option></select></label>
+        <label className="filter-control"><span>Follow-up</span><select value={followUpFilter} onChange={(event) => updateFollowUpFilter(event.target.value)} disabled={!taskData}><option value="all">All work</option><option value="follow-up">Follow-up tasks</option></select></label>
         <label className="filter-control"><span>Priority</span><select value={priority} onChange={(event) => updatePriorityFilter(event.target.value)} disabled={!taskData}><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option></select></label>
         <button className="button button-ghost button-small filter-button" type="button" onClick={clearFilters} disabled={!taskData}><Icon name="filter" size={15} />Clear</button>
       </div>

@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient, createSupabaseUserClient, getBearerToken } from '../../../../../lib/supabase-server';
+import { isSundayDate } from '../../../../../lib/follow-up-tasks.mjs';
 
 const anyEmployeeRoles = new Set(['super_admin', 'ea']);
 const ownEmployeeRoles = new Set(['doer', 'assigner']);
@@ -51,7 +52,7 @@ export async function POST(request, { params }) {
 
   const { data: item, error: itemError } = await admin
     .from('checklist_items')
-    .select('id,employee_id,status,due_at')
+    .select('id,employee_id,status,due_date,due_at,template:checklist_templates!checklist_items_template_id_fkey(frequency)')
     .eq('id', itemId)
     .maybeSingle();
   if (itemError) {
@@ -87,13 +88,26 @@ export async function POST(request, { params }) {
   if (item.status === 'completed') {
     return Response.json({ success: true, alreadyCompleted: true, item });
   }
-  if (item.status === 'deactivated') return errorResponse('This checklist item has been deactivated and cannot be completed.', 409);
+  let eligibleDeactivatedFollowUp = false;
+  if (item.status === 'deactivated' && ['weekly', 'every_15_days', 'monthly'].includes(item.template?.frequency)) {
+    const { data: holiday, error: holidayError } = await admin
+      .from('national_holidays')
+      .select('id')
+      .eq('holiday_date', item.due_date)
+      .eq('country', 'India')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    if (holidayError) return errorResponse('The checklist follow-up date could not be verified.', 500);
+    eligibleDeactivatedFollowUp = isSundayDate(item.due_date) || Boolean(holiday);
+  }
+  if (item.status === 'deactivated' && !eligibleDeactivatedFollowUp) return errorResponse('This checklist item has been deactivated and cannot be completed.', 409);
 
   const { data: updatedItems, error: updateError } = await admin
     .from('checklist_items')
     .update({ status: 'completed', completed_at: new Date().toISOString(), completed_by: user.id })
     .eq('id', itemId)
-    .in('status', ['pending', 'overdue'])
+    .in('status', eligibleDeactivatedFollowUp ? ['pending', 'overdue', 'deactivated'] : ['pending', 'overdue'])
     .select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by');
   if (updateError) {
     console.error('Checklist completion update failed.', { code: updateError.code, message: updateError.message });
