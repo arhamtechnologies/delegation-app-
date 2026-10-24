@@ -73,4 +73,6 @@ test('database read models preserve RLS and deterministic ordering', async () =>
   assert.match(dataSource, /order\('sort_group'/);
   assert.match(dataSource, /order\('sort_key'/);
   assert.match(dataSource, /order\('id'/);
+  assert.match(dataSource, /import \{ getWorkQueryError, normalizeWorkListRequest \} from '\.\/work-list\.mjs';/);
+  assert.match(dataSource, /const request = normalizeWorkListRequest\(input\);/);
 });
