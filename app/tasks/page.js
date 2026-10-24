@@ -27,7 +27,14 @@ function isValidDateFilter(value) {
 }
 
 function getWorkDeadline(workItem) {
+  if (workItem.isFollowUp) return `Original ${formatDateLabel(workItem.originalScheduledDate)} · Follow-up ${formatDateLabel(workItem.followUpDate)}`;
   return workItem.kind === 'checklist' ? formatChecklistDueAt(workItem.due_at) : formatTaskDeadline(workItem);
+}
+
+function formatDateLabel(value) {
+  if (!value) return '—';
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(Date.UTC(year, month - 1, day, 12)));
 }
 
 function getWorkLink(workItem) {
@@ -44,6 +51,7 @@ export default function Tasks() {
   const [workType, setWorkType] = useState('all');
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
+  const [followUpFilter, setFollowUpFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
   const [filtersReady, setFiltersReady] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -68,10 +76,12 @@ export default function Tasks() {
       const priorityValue = params.get('priority');
       const dateValue = params.get('date');
       const workTypeValue = params.get('workType');
+      const followUpValue = params.get('followUp');
       setEmployeeFilter(params.get('employee') || 'all');
       setWorkType(['task', 'checklist'].includes(workTypeValue) ? workTypeValue : 'all');
       setStatus(['pending', 'overdue', 'completed'].includes(statusValue) ? statusValue : 'all');
       setPriority(['critical', 'high', 'normal'].includes(priorityValue) ? priorityValue : 'all');
+      setFollowUpFilter(followUpValue === '1' ? 'follow-up' : 'all');
       setDateFilter(isValidDateFilter(dateValue) ? dateValue : '');
     }
 
@@ -122,50 +132,44 @@ export default function Tasks() {
   const taskRole = taskData?.role;
   const taskEmployeeId = taskData?.employeeId;
 
-  const load = useCallback(async () => {
-    if (!filtersReady || !taskRole || !taskEmployeeId) return;
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
-    if (loadedRef.current) setRefreshing(true);
-    else setLoading(true);
-    setError('');
-    const manager = canCreateTasks(taskRole);
-    const selectedEmployeeId = employeeFilter === 'all' ? (!manager ? taskEmployeeId : null) : employeeFilter;
-    try {
-      const [workResponse, summaryResponse] = await Promise.all([
-        getWorkItemsPage({
-          page,
-          pageSize: WORK_PAGE_SIZE,
-          search: debouncedSearch,
-          employeeId: selectedEmployeeId,
-          workType,
-          status,
-          priority,
-          dueDate: dateFilter,
-          includeCount: page === 0,
-          signal: controller.signal,
-        }),
-        !manager ? getWorkReport({ workType, status, priority, employeeId: selectedEmployeeId, from: dateFilter, to: dateFilter, search: debouncedSearch, signal: controller.signal }) : Promise.resolve({ data: null, error: null }),
-      ]);
-      if (controller.signal.aborted || !isLatestRequest(requestId, requestIdRef.current)) return;
-      const responseError = workResponse.error || summaryResponse.error;
-      if (responseError) throw responseError;
-      setTaskData((current) => ({ ...current, workItems: workResponse.data || [] }));
-      if (workResponse.count !== null && workResponse.count !== undefined) setTotal(workResponse.count);
-      if (summaryResponse.data?.summary) setWorkSummary(summaryResponse.data.summary);
-      loadedRef.current = true;
-    } catch (loadError) {
-      if (!controller.signal.aborted && isLatestRequest(requestId, requestIdRef.current)) setError(loadError.message || 'Unable to load tasks. Please try again.');
-    } finally {
-      if (!controller.signal.aborted && isLatestRequest(requestId, requestIdRef.current)) {
-        setLoading(false);
-        setRefreshing(false);
-      }
+    const manager = canCreateTasks(employee.role);
+    const selectedEmployeeId = Object.prototype.hasOwnProperty.call(overrides, 'employeeId') ? overrides.employeeId : (employeeFilter === 'all' ? null : employeeFilter);
+    const selectedStatus = overrides.status ?? status;
+    const selectedPriority = overrides.priority ?? priority;
+    const selectedDate = overrides.date ?? dateFilter;
+    const selectedWorkType = overrides.workType ?? workType;
+    const dateRange = selectedDate ? getDateFilterRange(selectedDate) : {};
+    const employeeRequest = manager
+      ? getTaskEmployees()
+      : Promise.resolve({ data: [employee], error: null });
+    const [workResponse, employeeResponse] = await Promise.all([
+      getUnifiedWorkItems({
+        employeeId: selectedEmployeeId || (!manager ? employee.id : undefined),
+        status: selectedStatus,
+        workType: selectedWorkType,
+        priority: selectedPriority,
+        dueDate: selectedDate || undefined,
+        from: dateRange.etaFrom,
+        to: dateRange.etaTo,
+        detail: 'list',
+        followUpOnly: followUpFilter === 'follow-up',
+      }),
+      employeeRequest,
+    ]);
+    const responseError = workResponse.error || employeeResponse.error;
+    if (responseError) {
+      setError(responseError.message || 'Unable to load tasks. Please try again.');
+      setLoading(false);
+      return;
     }
-  }, [dateFilter, debouncedSearch, employeeFilter, filtersReady, page, priority, status, taskEmployeeId, taskRole, workType]);
+    setTaskData({
+      role: employee.role,
+      employeeId: employee.id,
+      workItems: workResponse.data || [],
+      employees: employeeResponse.data || [],
+    });
+    setLoading(false);
+  }, [dateFilter, employeeFilter, followUpFilter, priority, status, workType]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -183,7 +187,17 @@ export default function Tasks() {
   const employees = useMemo(() => taskData?.employees || [], [taskData]);
   const canCreate = Boolean(taskData && canCreateTasks(taskData.role));
 
-  const totalPages = getPageCount(total, WORK_PAGE_SIZE);
+  const filteredTasks = useMemo(() => sortWorkItemsChronologically(workItems.filter((workItem) => {
+    const query = search.trim().toLowerCase();
+    const searchable = [workItem.title, workItem.description, workItem.assignee?.name, workItem.category, workItem.checklistItem?.template?.frequency].filter(Boolean).join(' ').toLowerCase();
+    const matchesSearch = !query || searchable.includes(query);
+    const matchesEmployee = employeeFilter === 'all' || workItem.assignee_id === employeeFilter;
+    const matchesWorkType = workType === 'all' || (workType === 'checklist' ? workItem.kind === 'checklist' : workItem.kind !== 'checklist');
+    const matchesFollowUp = followUpFilter === 'all' || workItem.isFollowUp;
+    const matchesDate = !dateFilter || getWorkItemScheduledDate(workItem, getChecklistTimeZone()) === dateFilter;
+    const workStatus = getWorkItemStatus(workItem);
+    return matchesSearch && matchesEmployee && matchesWorkType && matchesFollowUp && matchesDate && (status === 'all' || workStatus === status) && (priority === 'all' || workItem.priority === priority);
+  })), [workItems, search, employeeFilter, workType, followUpFilter, status, priority, dateFilter]);
 
   function updateForm(field, value) { setForm((current) => ({ ...current, [field]: value })); }
 
@@ -252,6 +266,12 @@ export default function Tasks() {
     updateFilterUrl('priority', nextPriority);
   }
 
+  function updateFollowUpFilter(nextFollowUp) {
+    const normalizedFollowUp = nextFollowUp === 'follow-up' ? 'follow-up' : 'all';
+    setFollowUpFilter(normalizedFollowUp);
+    updateFilterUrl('followUp', normalizedFollowUp === 'follow-up' ? '1' : 'all');
+  }
+
   function updateDateFilter(nextDate) {
     const normalizedDate = isValidDateFilter(nextDate) ? nextDate : '';
     setDateFilter(normalizedDate);
@@ -272,6 +292,7 @@ export default function Tasks() {
     setEmployeeFilter('all');
     setWorkType('all');
     setPriority('all');
+    setFollowUpFilter('all');
     setStatus('all');
     setDateFilter('');
     setPage(0);
@@ -280,6 +301,7 @@ export default function Tasks() {
     params.delete('workType');
     params.delete('status');
     params.delete('priority');
+    params.delete('followUp');
     params.delete('date');
     const query = params.toString();
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
@@ -301,6 +323,7 @@ export default function Tasks() {
         </div></div>
         <label className="filter-control"><span>Date</span><input type="date" value={dateFilter} onChange={(event) => updateDateFilter(event.target.value)} disabled={!taskData} /></label>
         <label className="filter-control"><span>Status</span><select value={status} onChange={(event) => updateStatusFilter(event.target.value)} disabled={!taskData}><option value="all">All status</option><option value="pending">Pending</option><option value="overdue">Overdue</option><option value="completed">Completed</option></select></label>
+        <label className="filter-control"><span>Follow-up</span><select value={followUpFilter} onChange={(event) => updateFollowUpFilter(event.target.value)} disabled={!taskData}><option value="all">All work</option><option value="follow-up">Follow-up tasks</option></select></label>
         <label className="filter-control"><span>Priority</span><select value={priority} onChange={(event) => updatePriorityFilter(event.target.value)} disabled={!taskData}><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option></select></label>
         <button className="button button-ghost button-small filter-button" type="button" onClick={clearFilters} disabled={!taskData}><Icon name="filter" size={15} />Clear</button>
       </div>
