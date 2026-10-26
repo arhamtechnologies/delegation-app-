@@ -1,14 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useEffect, useRef, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import { Icon } from '../../components/Icons';
-import { EmptyState, MetricCard, PriorityBadge, StatusBadge } from '../../components/UI';
+import { MetricCard } from '../../components/UI';
 import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
-import { formatChecklistDueAt } from '../../lib/checklist-data';
-import { formatTaskDeadline, getTaskEmployees } from '../../lib/task-data';
-import { getTodaysWorkItems, getUnifiedDashboardData, getWorkItemStatus, sortTodaysWorkItems } from '../../lib/work-data';
+import { getTaskEmployees } from '../../lib/task-data';
+import { getUnifiedDashboardData } from '../../lib/work-data';
+
+const DashboardTodayWork = dynamic(() => import('../../components/DashboardTodayWork'), {
+  loading: () => <section className="panel overview-panel" aria-label="Loading today&apos;s tasks"><div className="overview-loading-list"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div></section>,
+});
 
 function MetricSkeleton() {
   return <div className="metric-card metric-card-loading" aria-hidden="true"><div className="metric-card-top"><span className="metric-icon skeleton-shimmer" /></div><div className="metric-value"><span className="metric-value-placeholder skeleton-shimmer" /></div><div className="metric-label"><span className="metric-label-placeholder skeleton-shimmer" /></div></div>;
@@ -18,109 +22,60 @@ function IntroSkeleton() {
   return <section className="overview-intro overview-intro-loading" aria-label="Loading dashboard"><p><span className="overview-greeting-placeholder skeleton-shimmer" /></p><span className="overview-subtitle-placeholder skeleton-shimmer" /></section>;
 }
 
-function getTaskDueDisplay(task) {
-  if (task.kind === 'checklist') return { label: formatChecklistDueAt(task.due_at), overdue: getWorkItemStatus(task) === 'overdue' };
-  return {
-    label: formatTaskDeadline(task, { relative: true }),
-    overdue: getWorkItemStatus(task) === 'overdue',
-  };
-}
-
-function DashboardTaskRow({ task }) {
-  const due = getTaskDueDisplay(task);
-  const status = getWorkItemStatus(task);
-  const href = task.kind === 'checklist' ? `/tasks/checklist/${task.id}` : `/tasks/${task.id}`;
-  return <li className="dashboard-task-row">
-    <div className="dashboard-task-primary">
-      <Link href={href} className="dashboard-task-title">{task.title}</Link>
-      <span className={task.kind === 'checklist' ? 'dashboard-task-category task-source-badge' : 'dashboard-task-category'}>{task.kind === 'checklist' ? 'Checklist' : task.category}</span>
-    </div>
-    <div className="dashboard-task-meta">
-      <div className="dashboard-task-assignee"><span>Assigned to</span><strong>{task.assignee?.name || 'Unassigned'}</strong></div>
-      <PriorityBadge priority={task.priority} />
-      <StatusBadge status={status} compact />
-      <span className={`dashboard-task-due${due.overdue ? ' overdue' : ''}`}>{due.label}</span>
-    </div>
-  </li>;
-}
-
 export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const dashboardRequestId = useRef(0);
+  const dashboardAbortRef = useRef(null);
 
   async function load() {
+    dashboardAbortRef.current?.abort();
+    const controller = new AbortController();
+    dashboardAbortRef.current = controller;
+    const requestId = dashboardRequestId.current + 1;
+    dashboardRequestId.current = requestId;
     setLoading(true);
     setError('');
-    const { user, employee, error: employeeError } = await getCurrentEmployee();
-
-    if (!user) {
-      setLoading(false);
-      return;
+    try {
+      const { user, employee, error: employeeError } = await getCurrentEmployee();
+      if (controller.signal.aborted || dashboardRequestId.current !== requestId) return;
+      if (!user) return;
+      if (employeeError || !employee) throw employeeError || new Error('Unable to load your workspace profile. Please try again.');
+      const employeeRequest = canCreateTasks(employee.role)
+        ? getTaskEmployees()
+        : Promise.resolve({ data: [employee], error: null });
+      const [workResponse, employeeResponse] = await Promise.all([
+        getUnifiedDashboardData({ signal: controller.signal }),
+        employeeRequest,
+      ]);
+      if (controller.signal.aborted || dashboardRequestId.current !== requestId) return;
+      if (workResponse.error) throw workResponse.error;
+      if (employeeResponse.error) throw employeeResponse.error;
+      setDashboardData({
+        name: employee.name,
+        role: employee.role,
+        employees: employeeResponse.data || [],
+        metrics: workResponse.data?.metrics || {},
+        todayTasks: workResponse.data?.todayItems || [],
+      });
+    } catch (loadError) {
+      if (!controller.signal.aborted && dashboardRequestId.current === requestId) {
+        console.error('[dashboard] load failed', { message: loadError?.message || 'Unknown dashboard loading error' });
+        setError(loadError?.message || 'Unable to load dashboard data. Please try again.');
+      }
+    } finally {
+      if (!controller.signal.aborted && dashboardRequestId.current === requestId) setLoading(false);
     }
-
-    if (employeeError || !employee) {
-      setError('Unable to load your workspace profile. Please try again.');
-      setLoading(false);
-      return;
-    }
-
-    const employeeRequest = canCreateTasks(employee.role)
-      ? getTaskEmployees()
-      : Promise.resolve({ data: [employee], error: null });
-    const [workResponse, employeeResponse] = await Promise.all([
-      getUnifiedDashboardData(),
-      employeeRequest,
-    ]);
-
-    if (workResponse.error) {
-      setError(workResponse.error.message || 'Unable to load dashboard data. Please try again.');
-      setLoading(false);
-      return;
-    }
-
-    if (employeeResponse.error) setError(employeeResponse.error.message || 'Employees could not be loaded.');
-    const now = new Date();
-
-    setDashboardData({
-      name: employee.name,
-      role: employee.role,
-      employees: employeeResponse.data || [],
-      metrics: workResponse.data?.metrics || {},
-      todayTasks: getTodaysWorkItems(workResponse.data?.todayItems || [], now),
-    });
-    setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    return () => dashboardAbortRef.current?.abort();
+  }, []);
 
   const manager = Boolean(dashboardData && ['super_admin', 'assigner', 'ea'].includes(dashboardData.role));
   const metrics = dashboardData?.metrics || {};
-  const todayTasks = useMemo(() => dashboardData?.todayTasks || [], [dashboardData]);
-  const employees = dashboardData?.employees || [];
-  const [search, setSearch] = useState('');
-  const [employeeFilter, setEmployeeFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-
-  const filteredTodayTasks = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return sortTodaysWorkItems(todayTasks.filter((task) => {
-      const searchable = [task.title, task.description, task.assignee?.name, task.assignee?.email, task.category].filter(Boolean).join(' ').toLowerCase();
-      const matchesSearch = !query || searchable.includes(query);
-      const matchesEmployee = employeeFilter === 'all' || task.assignee_id === employeeFilter;
-      const taskStatus = getWorkItemStatus(task);
-      return matchesSearch && matchesEmployee && (statusFilter === 'all' || taskStatus === statusFilter);
-    }));
-  }, [employeeFilter, search, statusFilter, todayTasks]);
-
-  const dashboardFiltersActive = Boolean(search.trim() || employeeFilter !== 'all' || statusFilter !== 'all');
-
-  function clearDashboardFilters() {
-    setSearch('');
-    setEmployeeFilter('all');
-    setStatusFilter('all');
-  }
-
   const title = dashboardData ? (manager ? 'Dashboard' : 'My Tasks') : 'Loading workspace';
   const canCreate = dashboardData ? canCreateTasks(dashboardData.role) : false;
 
@@ -130,15 +85,6 @@ export default function Dashboard() {
     <section className="metric-grid overview-metrics" aria-label="Task summary">
     {!dashboardData ? <><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /></> : <><MetricCard label="Total tasks" value={metrics.total} href="/tasks" /><MetricCard label="Pending" value={metrics.pending} tone="purple" href="/tasks?status=pending" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Completed" value={metrics.completed} tone="mint" href="/tasks?status=completed" /></>}
     </section>
-    <section className="panel overview-panel">
-      <div className="simple-section-heading"><div><h2>{dashboardData ? "Today's tasks" : 'Loading tasks'}</h2><p>{dashboardData ? 'All tasks scheduled for today are shown here.' : 'Loading your latest task summary.'}</p></div><div className="dashboard-heading-actions"><Link className="button button-ghost button-small" href="/follow-up-tasks">Follow-up tasks</Link><Link className="text-link" href="/tasks">View all <Icon name="arrowUpRight" size={14} /></Link></div></div>
-      <div className="filter-bar dashboard-task-filters">
-        {manager && <label className="search-box"><Icon name="search" size={17} /><input aria-label="Search dashboard tasks or employees" placeholder="Search tasks or employees" value={search} onChange={(event) => setSearch(event.target.value)} disabled={!dashboardData} /></label>}
-        {manager && <label className="filter-control"><span>Employee</span><select aria-label="Filter dashboard tasks by employee" value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} disabled={!dashboardData}><option value="all">All employees</option>{employees.map((employeeOption) => <option value={employeeOption.id} key={employeeOption.id}>{employeeOption.name}</option>)}</select></label>}
-        <label className="filter-control"><span>Status</span><select aria-label="Filter dashboard tasks by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} disabled={!dashboardData}><option value="all">All status</option><option value="pending">Pending</option><option value="overdue">Overdue</option><option value="completed">Completed</option></select></label>
-        <button className="button button-ghost button-small filter-button" type="button" onClick={clearDashboardFilters} disabled={!dashboardData}><Icon name="filter" size={15} />Clear</button>
-      </div>
-      {!dashboardData ? <div className="overview-loading-list" aria-label="Loading tasks"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div> : filteredTodayTasks.length ? <ul className="dashboard-task-list">{filteredTodayTasks.map((task) => <DashboardTaskRow key={`${task.kind}-${task.id}`} task={task} />)}</ul> : <EmptyState compact icon="checkCircle" title={dashboardFiltersActive ? 'No tasks match these filters.' : 'No tasks scheduled for today.'} description={dashboardFiltersActive ? 'Try a different search or clear the filters to see more work.' : 'Everything scheduled for today will appear here.'} action={dashboardFiltersActive ? 'Clear filters' : null} onAction={dashboardFiltersActive ? clearDashboardFilters : undefined} />}
-    </section>
+    {dashboardData ? <DashboardTodayWork manager={manager} employees={dashboardData.employees} todayTasks={dashboardData.todayTasks} /> : <section className="panel overview-panel" aria-label="Loading today&apos;s tasks"><div className="overview-loading-list"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div></section>}
   </AppShell>;
 }
