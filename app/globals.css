@@ -628,12 +628,15 @@ h1, h2, h3, p { margin-top: 0; }
 }
 
 .dashboard-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.dashboard-follow-up-button { min-height: 50px; padding: 0 18px; font-size: 16px; font-weight: 700; white-space: nowrap; }
+.dashboard-follow-up-button:focus-visible { outline: 3px solid rgba(103,92,246,.38); outline-offset: 2px; }
+.dashboard-follow-up-button:active { background: var(--purple-dark); box-shadow: 0 4px 10px rgba(103,92,246,.24); transform: translateY(1px); }
 .follow-up-panel { margin-bottom: 20px; }
 .follow-up-table { min-width: 930px; }
 .follow-up-task-type { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
 
 @media (max-width: 720px) {
-  .simple-section-heading { align-items: flex-start; }
+  .dashboard-today-heading { align-items: flex-start; flex-wrap: wrap; }
   .dashboard-heading-actions { justify-content: flex-start; }
   .follow-up-filters .filter-control { flex-basis: 135px; }
 }

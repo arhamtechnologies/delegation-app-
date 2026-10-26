@@ -53,7 +53,7 @@ export default function DashboardTodayWork({ manager, employees, todayTasks }) {
   }
 
   return <section className="panel overview-panel">
-    <div className="simple-section-heading"><div><h2>Today&apos;s tasks</h2><p>Today&apos;s scheduled work is loaded separately from the dashboard summary.</p></div><div className="dashboard-heading-actions"><Link className="button button-ghost button-small" href="/follow-up-tasks">Follow-up tasks</Link><Link className="text-link" href="/tasks">View all <Icon name="arrowUpRight" size={14} /></Link></div></div>
+    <div className="section-header dashboard-today-heading"><div><h2>Today&apos;s tasks</h2><p>Today&apos;s scheduled work is loaded separately from the dashboard summary.</p></div><div className="dashboard-heading-actions"><Link className="button button-primary dashboard-follow-up-button" href="/follow-up-tasks">Follow-up tasks</Link><Link className="text-link" href="/tasks">View all <Icon name="arrowUpRight" size={14} /></Link></div></div>
     <div className="filter-bar dashboard-task-filters">
       {manager && <label className="search-box"><Icon name="search" size={17} /><input aria-label="Search dashboard tasks or employees" placeholder="Search tasks or employees" value={search} onChange={(event) => setSearch(event.target.value)} /></label>}
       {manager && <label className="filter-control"><span>Employee</span><select aria-label="Filter dashboard tasks by employee" value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}><option value="all">All employees</option>{(employees || []).map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label>}
