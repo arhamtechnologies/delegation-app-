@@ -8,6 +8,8 @@ import { Icon } from '../../../../components/Icons';
 import { EmptyState, SectionHeader, StatusBadge, formatDateTime } from '../../../../components/UI';
 import { getCurrentEmployee } from '../../../../lib/auth';
 import { addChecklistItemUpdate, canCompleteChecklist, checklistFrequencies, formatChecklistDueAt, getChecklistItemUpdates, getChecklistStatus, setChecklistCompletion } from '../../../../lib/checklist-data';
+import { addFollowUpMetadata } from '../../../../lib/follow-up-tasks.mjs';
+import { getActiveHolidayDates } from '../../../../lib/work-data';
 import { supabaseBrowser } from '../../../../lib/supabase-browser';
 
 function frequencyLabel(value) {
@@ -30,17 +32,19 @@ export default function ChecklistTaskDetail() {
     setError('');
     const { user, employee } = await getCurrentEmployee();
     if (!user || !employee) { setLoading(false); return; }
-    const [{ data, error: itemError }, { data: updateRows = [], error: updatesError } = {}] = await Promise.all([
+    const [{ data, error: itemError }, { data: updateRows = [], error: updatesError } = {}, holidayResponse] = await Promise.all([
       supabaseBrowser()
         .from('checklist_items')
         .select('id,template_id,employee_id,task,due_date,due_at,status,completed_at,completed_by,employee:employees!checklist_items_employee_id_fkey(id,name,email),template:checklist_templates!checklist_items_template_id_fkey(frequency,weekday,day_of_month,monthly_days,start_date,due_time)')
         .eq('id', id)
         .maybeSingle(),
       getChecklistItemUpdates(id),
+      getActiveHolidayDates(),
     ]);
     if (itemError) setError(itemError.message);
     if (updatesError) setError(updatesError.message);
-    setItem(data || null);
+    if (holidayResponse.error) setError(holidayResponse.error.message);
+    setItem(data ? addFollowUpMetadata({ ...data, kind: 'checklist', sourceType: 'checklist' }, new Set((holidayResponse.data || []).map((holiday) => holiday.holiday_date))) : null);
     setUpdates(updateRows || []);
     setCurrentEmployee(employee);
     setLoading(false);
@@ -50,7 +54,7 @@ export default function ChecklistTaskDetail() {
 
   async function toggleCompletion() {
     const currentStatus = getChecklistStatus(item);
-    if (!item || !canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) || currentStatus === 'deactivated') return;
+    if (!item || !canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) || (currentStatus === 'deactivated' && !item.isFollowUp)) return;
     setSaving(true);
     setError('');
     const { error: updateError } = await setChecklistCompletion(item.id, currentStatus !== 'completed');
@@ -80,7 +84,7 @@ export default function ChecklistTaskDetail() {
   if (!item) return <AppShell title="Checklist not found" eyebrow="Workspace / Tasks"><EmptyState icon="checkSquare" title="This checklist item is unavailable" description={error || 'It may not have been generated yet or you may not have access to it.'} action="Back to tasks" href="/tasks" /></AppShell>;
 
   const status = getChecklistStatus(item);
-  const canComplete = canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) && status !== 'deactivated';
+  const canComplete = canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) && (status !== 'deactivated' || item.isFollowUp);
   return <AppShell title="Checklist details" eyebrow="Workspace / Tasks" actions={<><Link className="button button-ghost button-small" href="/tasks"><Icon name="chevronRight" size={15} className="flip-icon" />Back to tasks</Link>{canComplete && <button className="button button-primary button-small" type="button" onClick={toggleCompletion} disabled={saving}><Icon name={status === 'completed' ? 'activity' : 'check'} size={16} />{status === 'completed' ? 'Reopen task' : 'Mark complete'}</button>}</>}>
     {error && <div className="inline-alert error"><Icon name="warning" size={16} />{error}</div>}
     <div className="detail-layout">

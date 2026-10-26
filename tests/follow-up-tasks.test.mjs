@@ -51,6 +51,25 @@ test('follow-up 7: incomplete follow-up remains visible with effective overdue s
   assert.deepEqual(getWorkSummary([item], new Date('2026-09-22T00:00:00.000Z')), { total: 1, pending: 0, overdue: 1, completed: 0 });
 });
 
+test('follow-up 7a: deactivated eligible follow-up remains actionable after filtering', async () => {
+  const source = await readFile(new URL('../lib/work-data.js', import.meta.url), 'utf8');
+  assert.match(source, /itemStatus !== 'deactivated' \|\| workItem\.isFollowUp/);
+});
+
+test('follow-up 7b: checklist details allow only decorated eligible follow-ups', async () => {
+  const source = await readFile(new URL('../app/tasks/checklist/[id]/page.js', import.meta.url), 'utf8');
+  assert.match(source, /addFollowUpMetadata\(\{ \.\.\.data, kind: 'checklist', sourceType: 'checklist' \}/);
+  assert.match(source, /currentStatus === 'deactivated' && !item\.isFollowUp/);
+});
+
+test('follow-up 7c: database work list keeps ordinary deactivated rows excluded', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/20261026080000_include_follow_up_work_items.sql', import.meta.url), 'utf8');
+  assert.match(migration, /security_invoker = true/);
+  assert.match(migration, /i\.status <> 'deactivated'/);
+  assert.match(migration, /template\.frequency in \('weekly', 'every_15_days', 'monthly'\)/);
+  assert.match(migration, /extract\(dow from i\.due_date\) = 0 or holiday\.id is not null/);
+});
+
 test('follow-up 8: generation preserves one occurrence per template and original date', async () => {
   const [generator, migration] = await Promise.all([
     readFile(new URL('../app/api/checklist/generate/route.js', import.meta.url), 'utf8'),
