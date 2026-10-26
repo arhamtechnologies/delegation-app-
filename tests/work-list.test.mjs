@@ -76,3 +76,17 @@ test('database read models preserve RLS and deterministic ordering', async () =>
   assert.match(dataSource, /import \{ getWorkQueryError, normalizeWorkListRequest, validateWorkReportPayload \} from '\.\/work-list\.mjs';/);
   assert.match(dataSource, /const request = normalizeWorkListRequest\(input\);/);
 });
+
+test('dashboard uses the aggregate RPC and bounded work-page query instead of loading all history', async () => {
+  const [dashboardSource, dataSource] = await Promise.all([
+    readFile(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/work-data.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(dashboardSource, /dynamic\(\(\) => import\('\.\.\/\.\.\/components\/DashboardTodayWork'\)/);
+  assert.match(dashboardSource, /dashboardAbortRef\.current\?\.abort\(\)/);
+  assert.match(dashboardSource, /const controller = new AbortController\(\);/);
+  assert.match(dataSource, /getWorkReport\(\)/);
+  assert.match(dataSource, /getWorkItemsPage\(\{ dueDate: today, pageSize: WORK_PAGE_SIZE, includeCount: false \}\)/);
+  assert.match(dataSource, /getWorkReport\(\{ signal \}\)/);
+  assert.doesNotMatch(dataSource, /getUnifiedWorkItems\(\{ detail: 'list', now \}\)/);
+});
