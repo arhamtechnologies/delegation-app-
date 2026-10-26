@@ -28,6 +28,17 @@ function getTaskType(workItem) {
   return 'Checklist';
 }
 
+function FollowUpMobileCard({ workItem }) {
+  const status = getWorkItemStatus(workItem);
+  return <article className="responsive-work-card">
+    <div className="responsive-work-card-heading"><Link className="report-detail-link" href={getWorkLink(workItem)}>{workItem.title}</Link><StatusBadge status={status} compact /></div>
+    <span className="follow-up-task-type">{getTaskType(workItem)}</span>
+    <div className="responsive-work-card-meta"><span>{workItem.assignee?.name || 'Unassigned'}</span><PriorityBadge priority={workItem.priority} /></div>
+    <div className="responsive-work-card-dates"><span><small>Original</small>{formatDate(workItem.originalScheduledDate)}</span><span><small>Follow-up</small><strong>{formatDate(workItem.followUpDate)}</strong></span></div>
+    <Link className="button button-ghost responsive-work-card-action" href={getWorkLink(workItem)}>Open <Icon name="arrowUpRight" size={14} /></Link>
+  </article>;
+}
+
 export default function FollowUpTasks() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -93,7 +104,7 @@ export default function FollowUpTasks() {
         <label className="filter-control"><span>Original date</span><input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} disabled={!data} /></label>
         <button className="button button-ghost button-small filter-button" type="button" onClick={clearFilters} disabled={!data}><Icon name="filter" size={15} />Clear</button>
       </div>
-      {loading ? <div className="loading-list task-loading-list" aria-label="Loading follow-up tasks"><span /><span /><span /></div> : filteredItems.length ? <div className="report-table-scroll"><table className="report-table follow-up-table"><thead><tr><th>Task</th><th>Employee</th><th>Original scheduled</th><th>Follow-up date</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>{filteredItems.map((workItem) => <tr key={`${workItem.kind}-${workItem.id}`}><td><Link className="report-detail-link" href={getWorkLink(workItem)}>{workItem.title}</Link><span className="follow-up-task-type">{getTaskType(workItem)}</span></td><td>{workItem.assignee?.name || 'Unassigned'}</td><td>{formatDate(workItem.originalScheduledDate)}</td><td><strong>{formatDate(workItem.followUpDate)}</strong></td><td><PriorityBadge priority={workItem.priority} /></td><td><StatusBadge status={getWorkItemStatus(workItem)} compact /></td><td><Link className="button button-ghost button-small" href={getWorkLink(workItem)}>Open <Icon name="arrowUpRight" size={14} /></Link></td></tr>)}</tbody></table></div> : <EmptyState icon="calendar" title="No follow-up tasks found" description="Only work originally scheduled on a Sunday or declared holiday appears here." action={search || employeeFilter !== 'all' || statusFilter !== 'all' || priorityFilter !== 'all' || dateFilter ? 'Clear filters' : null} onAction={search || employeeFilter !== 'all' || statusFilter !== 'all' || priorityFilter !== 'all' || dateFilter ? clearFilters : undefined} />}
+      {loading ? <div className="loading-list task-loading-list" aria-label="Loading follow-up tasks"><span /><span /><span /></div> : filteredItems.length ? <><div className="report-table-scroll follow-up-desktop-list"><table className="report-table follow-up-table"><thead><tr><th>Task</th><th>Employee</th><th>Original scheduled</th><th>Follow-up date</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>{filteredItems.map((workItem) => <tr key={`${workItem.kind}-${workItem.id}`}><td><Link className="report-detail-link" href={getWorkLink(workItem)}>{workItem.title}</Link><span className="follow-up-task-type">{getTaskType(workItem)}</span></td><td>{workItem.assignee?.name || 'Unassigned'}</td><td>{formatDate(workItem.originalScheduledDate)}</td><td><strong>{formatDate(workItem.followUpDate)}</strong></td><td><PriorityBadge priority={workItem.priority} /></td><td><StatusBadge status={getWorkItemStatus(workItem)} compact /></td><td><Link className="button button-ghost button-small" href={getWorkLink(workItem)}>Open <Icon name="arrowUpRight" size={14} /></Link></td></tr>)}</tbody></table></div><div className="responsive-work-card-list follow-up-mobile-list">{filteredItems.map((workItem) => <FollowUpMobileCard key={`${workItem.kind}-${workItem.id}`} workItem={workItem} />)}</div></> : <EmptyState icon="calendar" title="No follow-up tasks found" description="Only work originally scheduled on a Sunday or declared holiday appears here." action={search || employeeFilter !== 'all' || statusFilter !== 'all' || priorityFilter !== 'all' || dateFilter ? 'Clear filters' : null} onAction={search || employeeFilter !== 'all' || statusFilter !== 'all' || priorityFilter !== 'all' || dateFilter ? clearFilters : undefined} />}
     </section>
   </AppShell>;
 }

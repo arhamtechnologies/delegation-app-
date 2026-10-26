@@ -170,6 +170,57 @@ h1, h2, h3, p { margin-top: 0; }
   .checklist-summary .inline-stat span:not(.inline-stat-icon) { font-size: 10px; }
 }
 
+@media (max-width: 767px) {
+  .task-list-desktop { display: none; }
+  .task-list-mobile { display: grid; }
+  .dashboard-task-list { display: grid; gap: 10px; margin-top: 4px; }
+  .dashboard-task-row { display: block; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow-soft); }
+  .dashboard-task-row:first-child { padding: 14px; }
+  .dashboard-task-meta { justify-content: flex-start; margin-top: 12px; }
+  .dashboard-task-assignee { flex: 1 1 100%; }
+
+  .follow-up-mobile-list { display: grid; }
+  .follow-up-desktop-list { display: none; }
+  .responsive-work-card-list { gap: 10px; }
+  .responsive-work-card { display: grid; gap: 10px; padding: 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-soft); }
+  .responsive-work-card-heading, .responsive-work-card-meta, .responsive-work-card-dates { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+  .responsive-work-card-heading .report-detail-link { min-width: 0; overflow-wrap: anywhere; }
+  .responsive-work-card-meta { justify-content: flex-start; flex-wrap: wrap; color: var(--muted); font-size: 10px; }
+  .responsive-work-card-dates { align-items: flex-start; padding-top: 10px; border-top: 1px solid #f0f1f6; color: var(--muted-strong); font-size: 10px; }
+  .responsive-work-card-dates span { display: grid; gap: 3px; }
+  .responsive-work-card-dates small { color: var(--muted); font-size: 9px; }
+  .responsive-work-card-action { min-height: 44px; width: 100%; }
+
+  .report-table-scroll { overflow: visible; }
+  .report-table-panel .report-table, .report-detail-panel .report-table { min-width: 0; border-collapse: separate; border-spacing: 0 10px; }
+  .report-table-panel .report-table thead, .report-detail-panel .report-table thead { display: none; }
+  .report-table-panel .report-table tbody, .report-table-panel .report-table tr, .report-detail-panel .report-table tbody, .report-detail-panel .report-table tr { display: block; width: 100%; }
+  .report-table-panel .report-table tr, .report-detail-panel .report-table tr { padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-soft); }
+  .report-table-panel .report-table td, .report-detail-panel .report-table td { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; padding: 6px 0; border: 0; white-space: normal; text-align: right; }
+  .report-table-panel .report-table td:first-child, .report-detail-panel .report-table td:first-child { display: block; padding-top: 0; text-align: left; }
+  .report-table-panel .report-table td:not(:first-child)::before { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .report-table-panel .report-table td:nth-child(2)::before { content: 'Total work'; }
+  .report-table-panel .report-table td:nth-child(3)::before { content: 'Pending'; }
+  .report-table-panel .report-table td:nth-child(4)::before { content: 'Overdue'; }
+  .report-table-panel .report-table td:nth-child(5)::before { content: 'Completed'; }
+  .report-table-panel .report-table td:nth-child(6)::before { content: 'On-time'; }
+  .report-detail-panel .report-table td::before { color: var(--muted); content: ''; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .report-detail-panel .report-table td:nth-child(1)::before { content: 'Type'; }
+  .report-detail-panel .report-table td:nth-child(3)::before { content: 'Priority'; }
+  .report-detail-panel .report-table td:nth-child(4)::before { content: 'Status'; }
+  .report-detail-panel .report-table td:nth-child(5)::before { content: 'Original / follow-up'; }
+  .report-detail-panel .report-table td:nth-child(6)::before { content: 'Completed'; }
+  .report-detail-panel .report-table td:nth-child(2) { display: block; text-align: left; }
+  .report-detail-panel .report-table td:nth-child(2)::before { display: none; }
+  .report-table-panel .table-progress { justify-content: flex-end; }
+
+  .notification-list { display: grid; gap: 10px; padding: 12px 14px 14px; }
+  .notification-item { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 72px; padding: 13px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow-soft); text-align: left; }
+  .notification-item.unread { background: #faf9ff; }
+  .notification-copy { min-width: 0; }
+  .notification-action { display: none; }
+}
+
 @media (max-width: 440px) {
   .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric-grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -628,6 +679,7 @@ h1, h2, h3, p { margin-top: 0; }
 }
 
 .dashboard-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.follow-up-mobile-list { display: none; }
 .dashboard-follow-up-button { min-height: 50px; padding: 0 18px; font-size: 16px; font-weight: 700; white-space: nowrap; }
 .dashboard-follow-up-button:focus-visible { outline: 3px solid rgba(103,92,246,.38); outline-offset: 2px; }
 .dashboard-follow-up-button:active { background: var(--purple-dark); box-shadow: 0 4px 10px rgba(103,92,246,.24); transform: translateY(1px); }
