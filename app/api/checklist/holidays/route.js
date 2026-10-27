@@ -1,4 +1,6 @@
 import { authorizeNonWorkingDayManager, checklistApiError } from '../../../../lib/checklist-server';
+import { actorFromAuthorization, ruleResponse } from '../../../../lib/server/actor';
+import { disableHoliday } from '../../../../lib/server/non-working-day-rules';
 import { deactivateNonWorkingDayItems, formatNonWorkingDayError, getNonWorkingDayPreview, isValidChecklistDate } from '../../../../lib/checklist-non-working-day';
 
 export const runtime = 'nodejs';
@@ -110,9 +112,5 @@ export async function DELETE(request) {
   if (authorization.response) return authorization.response;
   let payload;
   try { payload = await request.json(); } catch { return checklistApiError('The holiday request could not be read.', 400); }
-  if (!uuidPattern.test(payload?.id || '')) return checklistApiError('A valid holiday is required.', 400);
-  const { data, error } = await authorization.admin.from('national_holidays').update({ is_active: false, updated_at: new Date().toISOString() }).eq('id', payload.id).select('id,is_active').maybeSingle();
-  if (error) return checklistApiError('The national holiday could not be disabled.', 500);
-  if (!data) return checklistApiError('The national holiday was not found.', 404);
-  return Response.json({ success: true, holiday: data });
+  return ruleResponse(await disableHoliday(authorization.admin, actorFromAuthorization(authorization), payload));
 }

@@ -4,9 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { getChecklistTemplateUpdateError, isChecklistTemplateValidationError } from '../lib/checklist-template-errors.mjs';
 
 const migrationPath = new URL('../supabase/migrations/20260917051200_fix_checklist_template_update_guard.sql', import.meta.url);
-const routePath = new URL('../app/api/checklist/templates/route.js', import.meta.url);
+// The route's validation and update rules now live in these shared modules.
+const routePaths = ['../lib/checklist-template-record.mjs', '../lib/server/checklist-template-rules.js'].map((path) => new URL(path, import.meta.url));
 const migration = await readFile(migrationPath, 'utf8');
-const route = await readFile(routePath, 'utf8');
+const route = (await Promise.all(routePaths.map((path) => readFile(path, 'utf8')))).join('\n');
 
 test('1. task title edits synchronize open occurrences', () => {
   assert.match(migration, /task = new\.task/);
