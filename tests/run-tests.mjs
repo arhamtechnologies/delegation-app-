@@ -7,3 +7,4 @@ import './work-items.test.mjs';
 import './checklist-template-record.test.mjs';
 import './whatsapp-commands.test.mjs';
 import './whatsapp-format.test.mjs';
+import './whatsapp-dates.test.mjs';
