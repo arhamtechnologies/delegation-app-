@@ -8,3 +8,5 @@ import './checklist-template-record.test.mjs';
 import './whatsapp-commands.test.mjs';
 import './whatsapp-format.test.mjs';
 import './whatsapp-dates.test.mjs';
+import './whatsapp-permissions.test.mjs';
+import './whatsapp-execute.test.mjs';
