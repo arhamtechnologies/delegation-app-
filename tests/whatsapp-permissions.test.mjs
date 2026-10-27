@@ -25,6 +25,6 @@ test('wa permissions 3: employees and unknown roles cannot propose anything', ()
 });
 
 test('wa permissions 4: permanent deletes say so in the label', () => {
-  assert.equal(deleteTaskLabel({ short_code: 12, title: 'GST filing' }), 'PERMANENT DELETE #12 "GST filing" (cannot be undone)');
-  assert.equal(deleteTemplateLabel({ short_code: 7, task: 'Petty cash' }), 'PERMANENT DELETE R7 "Petty cash" and its generated checklist items (cannot be undone)');
+  assert.equal(deleteTaskLabel({ short_code: 12, title: 'GST filing' }), 'PERMANENT DELETE "GST filing" (cannot be undone)');
+  assert.equal(deleteTemplateLabel({ short_code: 7, task: 'Petty cash' }), 'PERMANENT DELETE recurring task "Petty cash" and its generated checklist items (cannot be undone)');
 });
