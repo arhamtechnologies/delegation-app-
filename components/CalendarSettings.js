@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Icon } from './Icons';
+import { Loader } from './Loader';
 import { EmptyState, Modal, SectionHeader } from './UI';
 import { getAccessToken, getCurrentEmployee } from '../lib/auth';
 import { classifyEmployeeLeave } from '../lib/calendar-leave.mjs';
@@ -189,7 +190,7 @@ export default function CalendarSettings() {
   function closeEarlierLeave() { setEarlierLeaveOpen(false); }
   function editEmployeeLeaveFromHistory({ group }) { closeEarlierLeave(); openEmployeeLeaveConfig(group); }
 
-  if (loading) return <section className="panel checklist-loading"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></section>;
+  if (loading) return <section className="panel checklist-loading"><Loader label="Loading calendar..." /></section>;
   if (!employee || !canDeactivateNonWorkingDayTasks(employee.role)) return <section className="panel"><EmptyState icon="calendar" title="Calendar settings unavailable" description="You do not have permission to manage workspace calendars." /></section>;
   const today = getTodayInIndia();
   const classifiedLeave = classifyEmployeeLeave(employeeLeave, today);

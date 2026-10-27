@@ -4,14 +4,16 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState } from 'react';
 import AppShell from '../../components/AppShell';
+import { Loader } from '../../components/Loader';
 import { Icon } from '../../components/Icons';
 import { MetricCard } from '../../components/UI';
-import { canCreateTasks, getCurrentEmployee } from '../../lib/auth';
+import { canCreateTasks, getCurrentEmployee, peekCurrentEmployee } from '../../lib/auth';
+import { peekQuery, queryKey, setQuery } from '../../lib/query-cache';
 import { getTaskEmployees } from '../../lib/task-data';
 import { getUnifiedDashboardData } from '../../lib/work-data';
 
 const DashboardTodayWork = dynamic(() => import('../../components/DashboardTodayWork'), {
-  loading: () => <section className="panel overview-panel" aria-label="Loading today&apos;s tasks"><div className="overview-loading-list"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div></section>,
+  loading: () => <section className="panel overview-panel" aria-label="Loading today&apos;s tasks"><Loader label="Loading today&apos;s tasks..." /></section>,
 });
 
 function MetricSkeleton() {
@@ -23,7 +25,7 @@ function IntroSkeleton() {
 }
 
 export default function Dashboard() {
-  const [dashboardData, setDashboardData] = useState(null);
+  const [dashboardData, setDashboardData] = useState(() => peekQuery(queryKey('dashboard', peekCurrentEmployee()?.employee?.id)) || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const dashboardRequestId = useRef(0);
@@ -52,13 +54,15 @@ export default function Dashboard() {
       if (controller.signal.aborted || dashboardRequestId.current !== requestId) return;
       if (workResponse.error) throw workResponse.error;
       if (employeeResponse.error) throw employeeResponse.error;
-      setDashboardData({
+      const nextData = {
         name: employee.name,
         role: employee.role,
         employees: employeeResponse.data || [],
         metrics: workResponse.data?.metrics || {},
         todayTasks: workResponse.data?.todayItems || [],
-      });
+      };
+      setQuery(queryKey('dashboard', employee.id), nextData);
+      setDashboardData(nextData);
     } catch (loadError) {
       if (!controller.signal.aborted && dashboardRequestId.current === requestId) {
         console.error('[dashboard] load failed', { message: loadError?.message || 'Unknown dashboard loading error' });
@@ -85,6 +89,6 @@ export default function Dashboard() {
     <section className="metric-grid overview-metrics" aria-label="Task summary">
     {!dashboardData ? <><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /></> : <><MetricCard label="Total tasks" value={metrics.total} href="/tasks" /><MetricCard label="Pending" value={metrics.pending} tone="purple" href="/tasks?status=pending" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Completed" value={metrics.completed} tone="mint" href="/tasks?status=completed" /></>}
     </section>
-    {dashboardData ? <DashboardTodayWork manager={manager} employees={dashboardData.employees} todayTasks={dashboardData.todayTasks} /> : <section className="panel overview-panel" aria-label="Loading today&apos;s tasks"><div className="overview-loading-list"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></div></section>}
+    {dashboardData ? <DashboardTodayWork manager={manager} employees={dashboardData.employees} todayTasks={dashboardData.todayTasks} /> : <section className="panel overview-panel" aria-label="Loading today&apos;s tasks"><Loader label="Loading today&apos;s tasks..." /></section>}
   </AppShell>;
 }

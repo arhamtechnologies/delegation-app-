@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import AppShell from '../../../../components/AppShell';
+import { Loader } from '../../../../components/Loader';
 import { Icon } from '../../../../components/Icons';
 import { EmptyState, SectionHeader, StatusBadge, formatDateTime } from '../../../../components/UI';
 import { getCurrentEmployee } from '../../../../lib/auth';
@@ -76,7 +77,7 @@ export default function ChecklistTaskDetail() {
     setSaving(false);
   }
 
-  if (loading) return <AppShell title="Checklist details" eyebrow="Workspace / Tasks"><div className="panel detail-loading"><div className="loading-list"><span /><span /><span /></div></div></AppShell>;
+  if (loading) return <AppShell title="Checklist details" eyebrow="Workspace / Tasks"><div className="panel detail-loading"><Loader label="Loading checklist details..." /></div></AppShell>;
   if (!item) return <AppShell title="Checklist not found" eyebrow="Workspace / Tasks"><EmptyState icon="checkSquare" title="This checklist item is unavailable" description={error || 'It may not have been generated yet or you may not have access to it.'} action="Back to tasks" href="/tasks" /></AppShell>;
 
   const status = getChecklistStatus(item);

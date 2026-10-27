@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppShell from '../../components/AppShell';
+import { Loader } from '../../components/Loader';
 import { Icon } from '../../components/Icons';
 import TaskTextTooltip from '../../components/TaskTextTooltip';
 import { EmptyState, Modal, SectionHeader, StatusBadge } from '../../components/UI';
-import { getAccessToken, getCurrentEmployee } from '../../lib/auth';
+import { getAccessToken, getCurrentEmployee, peekCurrentEmployee } from '../../lib/auth';
+import { peekQuery, queryKey, setQuery } from '../../lib/query-cache';
 import { canManageChecklists, checklistFrequencies, checklistWeekdays, formatChecklistDays, formatChecklistTime, formatEmployeeId, getBusinessDate, getChecklistDashboardData, getChecklistSchemaError, getChecklistStatus, getChecklistTemplatesPage, setChecklistCompletion, triggerChecklistGeneration } from '../../lib/checklist-data';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 import { getPageCount, WORK_PAGE_SIZE } from '../../lib/work-list.mjs';
@@ -54,8 +56,12 @@ function BulkEditModal({ open, onClose, selectedCount, values, setValues, fields
   </Modal>;
 }
 
+function checklistCacheKey(employeeId = peekCurrentEmployee()?.employee?.id) {
+  return queryKey('checklist', employeeId);
+}
+
 export default function Checklist() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(() => peekQuery(checklistCacheKey())?.data || null);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -76,8 +82,8 @@ export default function Checklist() {
   const [templateFrequencyFilter, setTemplateFrequencyFilter] = useState('all');
   const [templateStatusFilter, setTemplateStatusFilter] = useState('all');
   const [templatePage, setTemplatePage] = useState(0);
-  const [templateTotal, setTemplateTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [templateTotal, setTemplateTotal] = useState(() => peekQuery(checklistCacheKey())?.templateTotal || 0);
+  const [loading, setLoading] = useState(() => !peekQuery(checklistCacheKey()));
   const [saving, setSaving] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -96,7 +102,7 @@ export default function Checklist() {
   }, [templateSearch]);
 
   async function load() {
-    setLoading(true);
+    if (!peekQuery(checklistCacheKey())) setLoading(true);
     setError('');
     const { user, employee, error: employeeError } = await getCurrentEmployee();
     if (!user) { setLoading(false); return; }
@@ -108,11 +114,16 @@ export default function Checklist() {
       manager ? getChecklistTemplatesPage({ page: templatePage, pageSize: WORK_PAGE_SIZE, search: debouncedTemplateSearch, employeeId: templateEmployeeFilter, frequency: templateFrequencyFilter, status: templateStatusFilter }) : Promise.resolve({ data: [], count: 0, error: null }),
       manager ? supabase.from('employees').select('id,name,email,active,role').order('name') : Promise.resolve({ data: [], error: null }),
     ]);
-    const generationResponse = await generationRequest;
-    const itemResponse = await getChecklistDashboardData();
+    // Show existing items right away; reload only if generation actually created new ones.
+    const [generationResponse, initialItemResponse] = await Promise.all([generationRequest, getChecklistDashboardData()]);
+    const itemResponse = generationResponse?.created > 0 ? await getChecklistDashboardData() : initialItemResponse;
     const responseError = getChecklistSchemaError(itemResponse.error || templateResponse.error || employeeResponse.error);
     if (responseError) { setError(responseError.message || 'Unable to load checklist data. Please try again.'); setLoading(false); return; }
-    setData({ userId: user.id, employee, manager, items: itemResponse.data?.todayItems || [], metrics: itemResponse.data?.metrics || {}, templates: templateResponse.data || [], employees: employeeResponse.data || [] });
+    const nextData = { userId: user.id, employee, manager, items: itemResponse.data?.todayItems || [], metrics: itemResponse.data?.metrics || {}, templates: templateResponse.data || [], employees: employeeResponse.data || [] };
+    // Only the default template view is cached, since that is what a fresh visit renders.
+    const defaultTemplateView = templatePage === 0 && !debouncedTemplateSearch && templateEmployeeFilter === 'all' && templateFrequencyFilter === 'all' && templateStatusFilter === 'all';
+    if (defaultTemplateView) setQuery(checklistCacheKey(employee.id), { data: nextData, templateTotal: templateResponse.count || 0 });
+    setData(nextData);
     setTemplateTotal(templateResponse.count || 0);
     templateQueryKeyRef.current = [templatePage, debouncedTemplateSearch, templateEmployeeFilter, templateFrequencyFilter, templateStatusFilter].join('|');
     if (generationResponse && !generationResponse.success) setError(generationResponse.error || 'Checklist generation failed.');
@@ -279,7 +290,7 @@ export default function Checklist() {
   return <AppShell title="Checklist" eyebrow="Workspace / Checklist" description="Manage recurring daily, weekly, and monthly work for employees." actions={titleAction}>
     {message && <div className="inline-alert success"><Icon name="checkCircle" size={16} />{message}</div>}
     {error && !modalOpen && !importOpen && !bulkOpen && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
-    {loading ? <section className="panel checklist-loading"><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /><span className="skeleton-shimmer" /></section> : canManage ? <>
+    {loading ? <section className="panel checklist-loading"><Loader label="Loading checklist..." /></section> : canManage ? <>
       <section className="task-summary-row checklist-summary"><div className="inline-stat"><span className="inline-stat-icon blue"><Icon name="list" size={16} /></span><div><strong>{templateTotal}</strong><span>Templates</span></div></div><div className="inline-stat"><span className="inline-stat-icon purple"><Icon name="calendar" size={16} /></span><div><strong>{todayItems.length}</strong><span>Today&apos;s items</span></div></div><div className="inline-stat"><span className="inline-stat-icon orange"><Icon name="warning" size={16} /></span><div><strong>{data.metrics?.overdue || 0}</strong><span>Overdue</span></div></div><div className="inline-stat"><span className="inline-stat-icon mint"><Icon name="checkCircle" size={16} /></span><div><strong>{data.metrics?.completed || 0}</strong><span>Completed</span></div></div></section>
       <section className="panel checklist-panel"><SectionHeader eyebrow="Recurring work" title="Checklist templates" description="Set the recurring rule once. Scheduled items are generated automatically when due." />
         <div className="filter-bar checklist-template-filters"><label className="search-box"><Icon name="search" size={17} /><input aria-label="Search checklist templates" placeholder="Search employees or tasks" value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} /></label><label className="filter-control"><span>Employee</span><select value={templateEmployeeFilter} onChange={(event) => { setTemplateEmployeeFilter(event.target.value); setTemplatePage(0); }}><option value="all">All employees</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></label><label className="filter-control"><span>Frequency</span><select value={templateFrequencyFilter} onChange={(event) => { setTemplateFrequencyFilter(event.target.value); setTemplatePage(0); }}><option value="all">All frequencies</option>{checklistFrequencies.map((frequency) => <option value={frequency.value} key={frequency.value}>{frequency.label}</option>)}</select></label><label className="filter-control"><span>Status</span><select value={templateStatusFilter} onChange={(event) => { setTemplateStatusFilter(event.target.value); setTemplatePage(0); }}><option value="all">All status</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div>

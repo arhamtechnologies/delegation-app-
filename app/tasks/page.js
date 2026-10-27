@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppShell from '../../components/AppShell';
+import { Loader } from '../../components/Loader';
 import { Icon } from '../../components/Icons';
 import TaskTextTooltip from '../../components/TaskTextTooltip';
 import { EmptyState, Modal, PriorityBadge, SectionHeader, StatusBadge } from '../../components/UI';
-import { canCreateTasks, getAccessToken, getCurrentEmployee } from '../../lib/auth';
+import { canCreateTasks, getAccessToken, getCurrentEmployee, peekCurrentEmployee } from '../../lib/auth';
+import { peekQuery, queryKey, setQuery } from '../../lib/query-cache';
 import { canCompleteChecklist, formatChecklistDueAt, setChecklistCompletion } from '../../lib/checklist-data';
 import { createTask, formatTaskDeadline, getTaskEmployees } from '../../lib/task-data';
 import { getWorkItemsPage, getWorkItemStatus, getWorkReport } from '../../lib/work-data';
@@ -42,7 +44,7 @@ function getWorkLink(workItem) {
 }
 
 export default function Tasks() {
-  const [taskData, setTaskData] = useState(null);
+  const [taskData, setTaskData] = useState(() => peekQuery(queryKey('tasks-workspace', peekCurrentEmployee()?.employee?.id)) || null);
   const [form, setForm] = useState(emptyForm);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -123,7 +125,9 @@ export default function Tasks() {
         setLoading(false);
         return;
       }
-      setTaskData({ role: employee.role, employeeId: employee.id, employees: employeeResponse.data || [] });
+      const workspace = { role: employee.role, employeeId: employee.id, employees: employeeResponse.data || [] };
+      setQuery(queryKey('tasks-workspace', employee.id), workspace);
+      setTaskData((current) => ({ ...current, ...workspace }));
     }
     loadWorkspace();
     return () => { active = false; };
@@ -139,6 +143,15 @@ export default function Tasks() {
     abortRef.current = controller;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    const listKey = queryKey('tasks', taskEmployeeId, [page, debouncedSearch, employeeFilter, workType, status, priority, dateFilter].join('|'));
+    const cachedList = peekQuery(listKey);
+    if (cachedList) {
+      setTaskData((current) => ({ ...current, workItems: cachedList.workItems }));
+      if (cachedList.total !== undefined) setTotal(cachedList.total);
+      if (cachedList.summary) setWorkSummary(cachedList.summary);
+      loadedRef.current = true;
+      setLoading(false);
+    }
     if (loadedRef.current) setRefreshing(true);
     else setLoading(true);
     setError('');
@@ -164,7 +177,9 @@ export default function Tasks() {
       const responseError = workResponse.error || summaryResponse.error;
       if (responseError) throw responseError;
       setTaskData((current) => ({ ...current, workItems: workResponse.data || [] }));
-      if (workResponse.count !== null && workResponse.count !== undefined) setTotal(workResponse.count);
+      const hasCount = workResponse.count !== null && workResponse.count !== undefined;
+      setQuery(listKey, { workItems: workResponse.data || [], total: hasCount ? workResponse.count : cachedList?.total, summary: summaryResponse.data?.summary || cachedList?.summary });
+      if (hasCount) setTotal(workResponse.count);
       if (summaryResponse.data?.summary) setWorkSummary(summaryResponse.data.summary);
       loadedRef.current = true;
     } catch (loadError) {
@@ -324,7 +339,7 @@ export default function Tasks() {
         <button className="button button-ghost button-small filter-button" type="button" onClick={clearFilters} disabled={!taskData}><Icon name="filter" size={15} />Clear</button>
       </div>
       {refreshing && <div className="task-refreshing" role="status">Updating results…</div>}
-      {!loadedRef.current ? (error ? <div className="data-error-state"><Icon name="warning" size={20} /><strong>Tasks could not be loaded.</strong><span>{error}</span><button className="button button-primary button-small" type="button" onClick={retryLoad}>Try again</button></div> : <div className="loading-list task-loading-list" aria-label="Loading tasks"><span /><span /><span /></div>) : workItems.length ? <>
+      {!loadedRef.current ? (error ? <div className="data-error-state"><Icon name="warning" size={20} /><strong>Tasks could not be loaded.</strong><span>{error}</span><button className="button button-primary button-small" type="button" onClick={retryLoad}>Try again</button></div> : <Loader label="Loading tasks..." />) : workItems.length ? <>
         <div className="task-list task-list-desktop">{workItems.map((workItem) => { const workStatus = getWorkItemStatus(workItem); const href = getWorkLink(workItem); const canComplete = workItem.kind === 'checklist' && canCompleteChecklist(taskData.role, taskData.employeeId, workItem.employee_id) && workStatus !== 'completed'; const canDelete = canCreate && workItem.kind !== 'checklist'; return <div className="task-row task-row-grid" key={`${workItem.kind}-${workItem.id}`}><div className="task-row-main">{canComplete ? <button className="task-check task-check-button" type="button" onClick={() => completeChecklist(workItem)} disabled={completing === workItem.id} aria-label={`Complete ${workItem.title}`}><Icon name="checkSquare" size={18} /></button> : <span className="task-check"><Icon name={workStatus === 'completed' ? 'checkCircle' : workItem.kind === 'checklist' ? 'checkSquare' : 'clipboard'} size={18} /></span>}<div className="task-copy"><TaskTextTooltip text={workItem.title} className="task-title-tooltip"><Link href={href} className="task-title">{workItem.title}</Link></TaskTextTooltip><div className="task-subline"><span className={workItem.kind === 'checklist' ? 'task-source-badge' : ''}>{workItem.kind === 'checklist' && <Icon name="checkSquare" size={11} />} {workItem.kind === 'checklist' ? 'Checklist' : workItem.category || 'General'}</span><span className="dot-separator" /><span>{workItem.description || 'No description added'}</span></div></div></div><div className="task-owner"><span className="avatar avatar-xs">{(workItem.assignee?.name || 'U').slice(0, 1).toUpperCase()}</span>{workItem.assignee?.name || 'Unassigned'}</div><PriorityBadge priority={workItem.priority} /><StatusBadge status={workStatus} compact /><span className={workStatus === 'overdue' ? 'due-date overdue' : 'due-date'}><Icon name="calendar" size={14} />{getWorkDeadline(workItem)}</span><div className="task-row-actions"><Link className="row-action" href={href} aria-label={`Open ${workItem.title}`}><Icon name="chevronRight" size={17} /></Link>{canDelete && <button className="row-action row-action-delete" type="button" onClick={() => deleteTask(workItem)} disabled={deletingTaskId === workItem.id} aria-label={`Delete ${workItem.title}`}>{deletingTaskId === workItem.id ? '…' : <Icon name="close" size={17} />}</button>}</div></div>; })}</div>
         <div className="task-list task-list-mobile">{workItems.map((workItem) => { const workStatus = getWorkItemStatus(workItem); const href = getWorkLink(workItem); const canDelete = canCreate && workItem.kind !== 'checklist'; return <div className="mobile-task-card" key={`${workItem.kind}-${workItem.id}`}><div className="mobile-task-card-top"><TaskTextTooltip text={workItem.title} className="task-title-tooltip"><Link href={href} className="task-title">{workItem.title}</Link></TaskTextTooltip><StatusBadge status={workStatus} compact /></div><div className="mobile-task-card-meta"><span>{workItem.assignee?.name || 'Unassigned'}</span><PriorityBadge priority={workItem.priority} /><span className={workStatus === 'overdue' ? 'overdue' : ''}><Icon name="calendar" size={13} />{getWorkDeadline(workItem)}</span></div><p>{workItem.description || 'No description added'}</p><div className="mobile-task-card-footer"><span>{workItem.kind === 'checklist' ? 'Checklist' : workItem.category || 'General'}</span>{canDelete && <button className="button button-ghost button-small" type="button" onClick={() => deleteTask(workItem)} disabled={deletingTaskId === workItem.id}>{deletingTaskId === workItem.id ? 'Deleting...' : 'Delete task'}</button>}</div></div>; })}</div>
         <div className="task-pagination" aria-label="Task pagination"><span>{total} result{total === 1 ? '' : 's'} · Page {page + 1} of {totalPages}</span><div><button className="button button-ghost button-small" type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={page === 0 || refreshing}>Previous</button><button className="button button-ghost button-small" type="button" onClick={() => setPage((value) => Math.min(totalPages - 1, value + 1))} disabled={page + 1 >= totalPages || refreshing}>Next</button></div></div>
