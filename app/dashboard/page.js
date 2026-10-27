@@ -7,6 +7,8 @@ import AppShell from '../../components/AppShell';
 import { Loader } from '../../components/Loader';
 import { Icon } from '../../components/Icons';
 import { MetricCard } from '../../components/UI';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { canCreateTasks, getCurrentEmployee, peekCurrentEmployee } from '../../lib/auth';
 import { peekQuery, queryKey, setQuery } from '../../lib/query-cache';
 import { getTaskEmployees } from '../../lib/task-data';
@@ -17,11 +19,18 @@ const DashboardTodayWork = dynamic(() => import('../../components/DashboardToday
 });
 
 function MetricSkeleton() {
-  return <div className="metric-card metric-card-loading" aria-hidden="true"><div className="metric-card-top"><span className="metric-icon skeleton-shimmer" /></div><div className="metric-value"><span className="metric-value-placeholder skeleton-shimmer" /></div><div className="metric-label"><span className="metric-label-placeholder skeleton-shimmer" /></div></div>;
+  return <Card className="h-full gap-0 p-4 shadow-none ring-border sm:p-5" aria-hidden="true"><Skeleton className="size-9 rounded-lg" /><Skeleton className="mt-4 h-7 w-14" /><Skeleton className="mt-2 h-4 w-24" /></Card>;
 }
 
 function IntroSkeleton() {
-  return <section className="overview-intro overview-intro-loading" aria-label="Loading dashboard"><p><span className="overview-greeting-placeholder skeleton-shimmer" /></p><span className="overview-subtitle-placeholder skeleton-shimmer" /></section>;
+  return <section className="overview-intro" aria-label="Loading dashboard"><Skeleton className="h-6 w-56" /><Skeleton className="mt-2 h-4 w-72 max-w-full" /></section>;
+}
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
 export default function Dashboard() {
@@ -84,10 +93,10 @@ export default function Dashboard() {
   const canCreate = dashboardData ? canCreateTasks(dashboardData.role) : false;
 
   return <AppShell title={title} eyebrow="Workspace" actions={canCreate ? <Link className="button button-primary" href="/tasks?create=1"><Icon name="plus" size={17} />Create task</Link> : null}>
-    {!dashboardData ? <IntroSkeleton /> : <section className="overview-intro"><p>Good morning, <strong>{dashboardData.name}</strong></p><span>Here is what needs your attention.</span></section>}
+    {!dashboardData ? <IntroSkeleton /> : <section className="overview-intro"><p suppressHydrationWarning>{greeting()}, <strong>{dashboardData.name}</strong></p><span>Here is what needs your attention today.</span></section>}
     {error && <div className="inline-alert error" role="alert"><Icon name="warning" size={16} />{error}<button className="button button-ghost button-small" type="button" onClick={load}>Try again</button></div>}
     <section className="metric-grid overview-metrics" aria-label="Task summary">
-    {!dashboardData ? <><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /></> : <><MetricCard label="Total tasks" value={metrics.total} href="/tasks" /><MetricCard label="Pending" value={metrics.pending} tone="purple" href="/tasks?status=pending" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} href="/tasks?status=overdue" /><MetricCard label="Completed" value={metrics.completed} tone="mint" href="/tasks?status=completed" /></>}
+    {!dashboardData ? <><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /><MetricSkeleton /></> : <><MetricCard label="Total tasks" value={metrics.total} icon="clipboard" href="/tasks" /><MetricCard label="Pending" value={metrics.pending} tone="purple" icon="clock" href="/tasks?status=pending" /><MetricCard label="Overdue" value={metrics.overdue} tone={metrics.overdue ? 'orange' : 'green'} icon="warning" href="/tasks?status=overdue" /><MetricCard label="Completed" value={metrics.completed} tone="mint" icon="checkCircle" href="/tasks?status=completed" /></>}
     </section>
     {dashboardData ? <DashboardTodayWork manager={manager} employees={dashboardData.employees} todayTasks={dashboardData.todayTasks} /> : <section className="panel overview-panel" aria-label="Loading today&apos;s tasks"><Loader label="Loading today&apos;s tasks..." /></section>}
   </AppShell>;
