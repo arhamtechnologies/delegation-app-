@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '../../../components/AppShell';
+import { Loader } from '../../../components/Loader';
 import { Icon } from '../../../components/Icons';
 import { EmptyState, PriorityBadge, SectionHeader, StatusBadge, formatDate, formatDateTime, relativeTime } from '../../../components/UI';
 import { getAuthenticatedUser } from '../../../lib/auth';
@@ -88,7 +89,7 @@ export default function TaskDetail() {
     setSaving(false);
   }
 
-  if (loading) return <AppShell title="Task details" eyebrow="Workspace / Tasks"><div className="panel detail-loading"><div className="loading-list"><span /><span /><span /></div></div></AppShell>;
+  if (loading) return <AppShell title="Task details" eyebrow="Workspace / Tasks"><div className="panel detail-loading"><Loader label="Loading task details..." /></div></AppShell>;
   if (!task) return <AppShell title="Task not found" eyebrow="Workspace / Tasks"><EmptyState icon="clipboard" title="This task is unavailable" description={error || 'It may have been deleted or you may not have access to it.'} action="Back to tasks" href="/tasks" /></AppShell>;
 
   const taskStatus = getTaskStatus(task);

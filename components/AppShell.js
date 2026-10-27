@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { supabaseBrowser } from '../lib/supabase-browser';
-import { clearAuthCache, getCurrentEmployee, syncAuthSession } from '../lib/auth';
+import { clearAuthCache, getCurrentEmployee, peekCurrentEmployee, syncAuthSession } from '../lib/auth';
 import { getUnreadNotificationCount } from '../lib/notifications';
 import { Icon } from './Icons';
+import { Loader } from './Loader';
 
 const managerNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid', section: 'Workspace' },
@@ -23,6 +24,12 @@ const doerNavItems = [
   { href: '/checklist', label: 'Checklist', icon: 'checkSquare', section: 'Workspace' },
 ];
 
+// AppShell remounts on every page; reuse the last verified profile so navigation skips the session screen.
+function getCachedProfile() {
+  const employee = peekCurrentEmployee()?.employee;
+  return employee?.active !== false && !employee?.must_change_password ? employee || null : null;
+}
+
 function NotificationBell({ unreadCount, mobile = false }) {
   return <Link className={`notification-bell${mobile ? ' notification-bell-mobile' : ''}`} href="/notifications" aria-label="Notifications">
     <Icon name="bell" size={mobile ? 19 : 18} />
@@ -34,9 +41,9 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(getCachedProfile);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [authState, setAuthState] = useState('checking');
+  const [authState, setAuthState] = useState(() => (getCachedProfile() ? 'authenticated' : 'checking'));
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const redirectingToLogin = useRef(false);
@@ -66,9 +73,6 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
           return;
         }
 
-        const { count, error: notificationError } = await getUnreadNotificationCount(employee.id);
-        if (notificationError) console.error('Unable to load unread notification count.', { code: notificationError.code, message: notificationError.message });
-
         if (employee.must_change_password) {
           if (active) {
             setProfile(employee);
@@ -80,9 +84,13 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
 
         if (active) {
           setProfile(employee);
-          setUnreadCount(count || 0);
           setAuthState('authenticated');
         }
+        // Load the badge count after the shell is visible instead of blocking it.
+        getUnreadNotificationCount(employee.id).then(({ count, error: notificationError }) => {
+          if (notificationError) console.error('Unable to load unread notification count.', { code: notificationError.code, message: notificationError.message });
+          else if (active) setUnreadCount(count || 0);
+        });
       })().finally(() => {
         profileRequest = null;
       });
@@ -175,16 +183,16 @@ export default function AppShell({ children, title, eyebrow = 'Workspace', descr
     }
   }
 
-  if (authState === 'checking') return <div className="auth-loading-shell" role="status">Checking your session...</div>;
-  if (authState === 'password_change_required') return <div className="auth-loading-shell" role="status">Your password needs to be updated...</div>;
-  if (authState === 'signed_out') return <div className="auth-loading-shell" role="status">Signing you out...</div>;
+  if (authState === 'checking') return <Loader fullScreen label="Checking your session..." />;
+  if (authState === 'password_change_required') return <Loader fullScreen label="Your password needs to be updated..." />;
+  if (authState === 'signed_out') return <Loader fullScreen label="Signing you out..." />;
 
   const isManager = ['super_admin', 'assigner', 'ea'].includes(profile?.role);
   const managerRoute = pathname === '/employees' || pathname.startsWith('/employees/') || pathname === '/mis' || pathname.startsWith('/mis/') || pathname === '/calendar' || pathname.startsWith('/calendar/');
   const calendarRoute = pathname === '/calendar' || pathname.startsWith('/calendar/');
   const canManageCalendar = ['super_admin', 'ea'].includes(profile?.role);
-  if (managerRoute && !isManager) return <div className="auth-loading-shell" role="status">Redirecting to your tasks...</div>;
-  if (calendarRoute && !canManageCalendar) return <div className="auth-loading-shell" role="status">Redirecting to your checklist...</div>;
+  if (managerRoute && !isManager) return <Loader fullScreen label="Redirecting to your tasks..." />;
+  if (calendarRoute && !canManageCalendar) return <Loader fullScreen label="Redirecting to your checklist..." />;
   const visibleItems = (isManager ? managerNavItems : doerNavItems).filter((item) => !item.roles || item.roles.includes(profile?.role));
   const sections = [...new Set(visibleItems.map((item) => item.section))];
 
