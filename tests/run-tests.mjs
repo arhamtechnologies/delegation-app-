@@ -10,3 +10,4 @@ import './whatsapp-format.test.mjs';
 import './whatsapp-dates.test.mjs';
 import './whatsapp-permissions.test.mjs';
 import './whatsapp-execute.test.mjs';
+import './whatsapp-prompt.test.mjs';
