@@ -23,15 +23,18 @@ test('wa format 2: an ambiguous name asks, an exact name wins', () => {
   assert.match(resolveAssigneeName('zed', people).error, /No assignable employee/);
 });
 
-test('wa format 3: task, checklist and template lines carry their references', () => {
+test('wa format 3: lines are short bullets without numbers; model text adds them', () => {
   const now = new Date('2026-10-27T06:00:00.000Z');
-  const task = formatTaskLine({ short_code: 12, title: 'GST', status: 'pending', priority: 'high', eta: '2026-10-26T13:00:00.000Z', assignee: { name: 'Vipul' } }, now);
-  assert.match(task, /^#12 GST \| Vipul \| overdue \| high \| due /);
-  const item = formatChecklistLine({ short_code: 45, task: 'Petty cash', status: 'pending', due_date: '2026-10-27', due_at: '2026-10-27T13:00:00.000Z', employee: { name: 'Varun' } }, now);
-  assert.match(item, /^C45 Petty cash \| Varun \| pending \| /);
-  const template = formatTemplateLine({ short_code: 7, task: 'Petty cash', frequency: 'weekly', weekday: 1, due_time: '10:00:00', active: true, employee: { name: 'Varun' } });
-  assert.match(template, /^R7 Petty cash \| Varun \| weekly Mon at 10:00 \| active$/);
-  assert.match(formatTemplateLine({ short_code: 8, task: 'Rent', frequency: 'monthly', monthly_days: [1, 15], due_time: '09:30', active: false, employee: { name: 'Varun' } }), /monthly 1,15 at 09:30 \| paused$/);
+  const task = { short_code: 12, title: 'GST', status: 'pending', priority: 'high', eta: '2026-10-26T13:00:00.000Z', assignee: { name: 'Vipul' } };
+  assert.match(formatTaskLine(task, now), /^• GST — Vipul, overdue, high, due /);
+  assert.match(formatTaskLine(task, now, { ids: true }), /^• #12 GST — Vipul/);
+  const item = { short_code: 45, task: 'Petty cash', status: 'pending', due_date: '2026-10-27', due_at: '2026-10-27T13:00:00.000Z', employee: { name: 'Varun' } };
+  assert.match(formatChecklistLine(item, now), /^• Petty cash — Varun, pending, /);
+  assert.match(formatChecklistLine(item, now, { ids: true }), /^• C45 Petty cash — Varun/);
+  const weekly = { short_code: 7, task: 'Petty cash', frequency: 'weekly', weekday: 1, due_time: '10:00:00', active: true, employee: { name: 'Varun' } };
+  assert.equal(formatTemplateLine(weekly), '• Petty cash — Varun, weekly Mon at 10:00');
+  assert.match(formatTemplateLine(weekly, { ids: true }), /^• R7 /);
+  assert.match(formatTemplateLine({ short_code: 8, task: 'Rent', frequency: 'monthly', monthly_days: [1, 15], due_time: '09:30', active: false, employee: { name: 'Varun' } }), /monthly 1,15 at 09:30 \(paused\)$/);
 });
 
 test('wa format 4: MIS lists employees by overdue count', () => {
@@ -45,9 +48,9 @@ test('wa format 4: MIS lists employees by overdue count', () => {
     ],
   });
   assert.match(text, /MIS Oct 1 – Oct 31/);
-  assert.match(text, /Total 10 · done 4 · pending 4 · overdue 2/);
-  assert.ok(text.indexOf('B:') < text.indexOf('A:'));
-  assert.match(text, /B: total 6 · done 3 \(on time 2\) · overdue 2 · pending 1/);
+  assert.match(text, /4\/10 done · 4 pending · 2 overdue/);
+  assert.ok(text.indexOf('• B:') < text.indexOf('• A:'));
+  assert.match(text, /• B: 3\/6 done \(2 on time\) · 2 overdue · 1 pending/);
 });
 
 test('wa format 5: daily update shows checklist counts when given', () => {
