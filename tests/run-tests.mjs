@@ -5,3 +5,4 @@ import './follow-up-tasks.test.mjs';
 import './whatsapp-updates.test.mjs';
 import './work-items.test.mjs';
 import './checklist-template-record.test.mjs';
+import './whatsapp-commands.test.mjs';
