@@ -1,6 +1,8 @@
 import { Geist } from 'next/font/google';
+import Script from 'next/script';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import AppFrame from '../components/AppFrame';
+import InstallApp from '../components/InstallApp';
 import { getServerSession, getSidebarDefaultOpen } from '../lib/server-session';
 import './globals.css';
 
@@ -21,7 +23,10 @@ export const viewport = {
   themeColor: '#ffffff',
 };
 
+// Chrome can offer installation before React loads; keep that event for components/InstallApp.js.
+const installPromptCapture = "window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__installPromptEvent=e;});";
+
 export default async function RootLayout({ children }) {
   const [session, sidebarOpen] = await Promise.all([getServerSession(), getSidebarDefaultOpen()]);
-  return <html lang="en" className={`${geist.variable} ${geist.className}`}><body><TooltipProvider delayDuration={200}><AppFrame initialProfile={session?.employee || null} initialUserId={session?.userId || null} initialUnreadCount={session?.unreadCount || 0} sidebarOpen={sidebarOpen}>{children}</AppFrame></TooltipProvider></body></html>;
+  return <html lang="en" className={`${geist.variable} ${geist.className}`}><body><Script id="install-prompt-capture" strategy="beforeInteractive">{installPromptCapture}</Script><TooltipProvider delayDuration={200}><AppFrame initialProfile={session?.employee || null} initialUserId={session?.userId || null} initialUnreadCount={session?.unreadCount || 0} sidebarOpen={sidebarOpen}>{children}</AppFrame><InstallApp /></TooltipProvider></body></html>;
 }
