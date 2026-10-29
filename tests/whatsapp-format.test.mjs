@@ -32,9 +32,9 @@ test('wa format 3: lines are short bullets without numbers; model text adds them
   assert.match(formatChecklistLine(item, now), /^• Petty cash — Varun, pending, /);
   assert.match(formatChecklistLine(item, now, { ids: true }), /^• C45 Petty cash — Varun/);
   const weekly = { short_code: 7, task: 'Petty cash', frequency: 'weekly', weekday: 1, due_time: '10:00:00', active: true, employee: { name: 'Varun' } };
-  assert.equal(formatTemplateLine(weekly), '• Petty cash — Varun, weekly Mon at 10:00');
+  assert.equal(formatTemplateLine(weekly), '• Petty cash — Varun, weekly Mon at 10:00 AM');
   assert.match(formatTemplateLine(weekly, { ids: true }), /^• R7 /);
-  assert.match(formatTemplateLine({ short_code: 8, task: 'Rent', frequency: 'monthly', monthly_days: [1, 15], due_time: '09:30', active: false, employee: { name: 'Varun' } }), /monthly 1,15 at 09:30 \(paused\)$/);
+  assert.match(formatTemplateLine({ short_code: 8, task: 'Rent', frequency: 'monthly', monthly_days: [1, 15], due_time: '09:30', active: false, employee: { name: 'Varun' } }), /monthly 1,15 at 9:30 AM \(paused\)$/);
 });
 
 test('wa format 4: MIS lists employees by overdue count', () => {
