@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
 import { clearAuthCache, getAccessToken, getCurrentEmployee } from '../../lib/auth';
+import { AuthLayout, AuthMessage, AuthNote } from '../../components/AuthLayout';
+import { Loader, Spinner } from '../../components/Loader';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function ChangePassword() {
   const router = useRouter();
@@ -79,7 +84,14 @@ export default function ChangePassword() {
     }
   }
 
-  if (checking) return <main className="auth-loading-shell" role="status">Preparing your account...</main>;
+  if (checking) return <Loader fullScreen label="Preparing your account..." />;
 
-  return <main className="password-change-page"><section className="password-change-card"><div className="mobile-login-logo"><span className="brand-mark"><Icon name="sparkles" size={18} /></span>Delegation</div><div className="password-change-icon"><Icon name="lock" size={21} /></div><span className="eyebrow">Account setup</span><h1>Choose a new password</h1><p className="password-change-intro">Welcome{employee?.name ? `, ${employee.name}` : ''}. Your administrator gave you a temporary password. Replace it before you continue.</p><form className="auth-form" onSubmit={submit}><label htmlFor="new-password">New password</label><div className="input-with-icon"><Icon name="lock" size={17} /><input id="new-password" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={password} onChange={(event) => setPassword(event.target.value)} /></div><label htmlFor="confirm-password">Confirm new password</label><div className="input-with-icon"><Icon name="lock" size={17} /><input id="confirm-password" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>{error && <div className="form-error"><Icon name="warning" size={16} />{error}</div>}<button className="button button-primary button-full" type="submit" disabled={saving}>{saving ? 'Updating password...' : 'Set new password'}{!saving && <Icon name="arrowUpRight" size={17} />}</button></form><p className="login-note"><Icon name="shield" size={14} />Your password is protected by Supabase Auth.</p></section></main>;
+  return <AuthLayout eyebrow="Account setup" title="Choose a new password" description={`Welcome${employee?.name ? `, ${employee.name}` : ''}. Your administrator gave you a temporary password. Replace it before you continue.`} footer={<AuthNote />}>
+    <form className="grid gap-4" onSubmit={submit}>
+      <div className="grid gap-2"><Label htmlFor="new-password">New password</Label><Input id="new-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={password} onChange={(event) => setPassword(event.target.value)} /><p className="text-xs text-muted-foreground">At least 8 characters.</p></div>
+      <div className="grid gap-2"><Label htmlFor="confirm-password">Confirm new password</Label><Input id="confirm-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>
+      {error && <AuthMessage>{error}</AuthMessage>}
+      <Button className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm" type="submit" disabled={saving}>{saving ? <><Spinner />Updating password...</> : 'Set new password'}{!saving && <Icon name="arrowUpRight" size={17} />}</Button>
+    </form>
+  </AuthLayout>;
 }

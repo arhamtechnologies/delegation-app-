@@ -26,12 +26,14 @@ test('wa commands 4: checklist and person lists', () => {
   expectAll(['checklist overdue', 'overdue checklist'], { kind: 'checklist', status: 'overdue', day: 'today' });
   expectAll(['checklist yesterday'], { kind: 'checklist', day: 'yesterday' });
   expectAll(['checklist vipul'], { kind: 'checklist', name: 'vipul', day: 'today' });
-  expectAll(['vipul tasks', 'tasks of vipul', 'vipul ke tasks', 'Vipul ke pending tasks'], { kind: 'person_tasks', name: 'vipul' });
+  expectAll(['vipul tasks', 'tasks of vipul', 'vipul ke tasks'], { kind: 'person_tasks', name: 'vipul' });
+  expectAll(['Vipul ke pending tasks', 'vipul open tasks'], { kind: 'person_tasks', name: 'vipul', status: 'pending' });
+  expectAll(['vipul overdue tasks'], { kind: 'person_tasks', name: 'vipul', status: 'overdue' });
   expectAll(['Vipul Kumar tasks'], { kind: 'person_tasks', name: 'vipul kumar' });
 });
 
 test('wa commands 5: status lists and MIS', () => {
-  expectAll(['overdue', 'overdue tasks'], { kind: 'list', status: 'overdue' });
+  expectAll(['overdue', 'overdue tasks', 'total overdue for today', 'overdue today', 'show overdue tasks for today', 'total overdue for today ?', 'Overdue today?'], { kind: 'list', status: 'overdue' });
   expectAll(['pending', 'pending tasks'], { kind: 'list', status: 'pending' });
   expectAll(['follow up', 'followup', 'follow-up tasks'], { kind: 'list', status: 'followup' });
   expectAll(['mis', 'MIS this month', 'mis report'], { kind: 'mis', period: 'this_month' });
@@ -60,4 +62,10 @@ test('wa commands 7: help and updates keep working', () => {
   expectAll(['help', '?'], { kind: 'help' });
   expectAll(['updates', 'aaj ka update'], { kind: 'updates', day: 'today' });
   expectAll(['updates yesterday'], { kind: 'updates', day: 'yesterday' });
+});
+
+test('wa commands 8: dashboard stats', () => {
+  expectAll(['stats', 'dashboard', 'show dashboard', 'dashboard today', "today's stats", 'overview?'], { kind: 'stats' });
+  expectAll(['stats of vipul', 'dashboard for vipul', 'vipul stats', 'vipul ka dashboard'], { kind: 'stats', name: 'vipul' });
+  assert.equal(parseCommand('stats of overdue'), null);
 });

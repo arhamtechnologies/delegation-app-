@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { createSupabaseAdminClient, createSupabaseUserClient, getBearerToken } from '../../../../lib/supabase-server';
 
 const managerRoles = new Set(['super_admin', 'assigner', 'ea']);
@@ -18,18 +19,47 @@ function validatePayload(payload) {
   const email = typeof payload?.email === 'string' ? payload.email.trim().toLowerCase() : '';
   const mobile = typeof payload?.mobile === 'string' ? payload.mobile.trim() : '';
   const role = typeof payload?.role === 'string' ? payload.role : '';
-  const password = typeof payload?.password === 'string' ? payload.password : '';
 
   if (!name) return { error: 'Full name is required.' };
   if (name.length > 120) return { error: 'Full name must be 120 characters or fewer.' };
   if (!emailPattern.test(email)) return { error: 'A valid work email is required.' };
   if (!employeeRoles.has(role)) return { error: 'Choose a valid workspace role.' };
-  if (password.length < 8) return { error: 'Temporary password must be at least 8 characters.' };
-  if (password.length > 128) return { error: 'Temporary password must be 128 characters or fewer.' };
   if (mobile.length > 40) return { error: 'Mobile number must be 40 characters or fewer.' };
   if (typeof payload?.active !== 'boolean') return { error: 'Active workspace access must be true or false.' };
 
-  return { value: { name, email, mobile: mobile || null, role, active: payload.active, password } };
+  return { value: { name, email, mobile: mobile || null, role, active: payload.active } };
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+}
+
+async function sendEmployeeSetupEmail({ email, name, setupUrl }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!apiKey || !from) return { error: 'Email invitations are not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL on the server.' };
+
+  const safeName = escapeHtml(name);
+  const safeSetupUrl = escapeHtml(setupUrl);
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from,
+      to: [email],
+      subject: 'Set up your Delegation workspace account',
+      html: `<p>Hi ${safeName},</p><p>Your administrator added you to the Delegation workspace. Use the link below to set your password and sign in.</p><p><a href="${safeSetupUrl}">Set your password</a></p><p>If you were not expecting this invitation, you can ignore this email.</p>`,
+      text: `Hi ${name},\n\nYour administrator added you to the Delegation workspace. Set your password and sign in using this link:\n${setupUrl}\n\nIf you were not expecting this invitation, you can ignore this email.`,
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await response.json().catch(() => ({}));
+    console.error('Resend could not deliver an employee setup email.', { status: response.status, name: details?.name, message: details?.message });
+    const reason = typeof details?.message === 'string' && details.message.length <= 300 ? ` Resend: ${details.message}` : '';
+    return { error: `The invitation email could not be sent.${reason} Check the Resend sender configuration and try again.` };
+  }
+  return { success: true };
 }
 
 export async function POST(request) {
@@ -45,6 +75,9 @@ export async function POST(request) {
 
   const validation = validatePayload(payload);
   if (validation.error) return errorResponse(validation.error, 400);
+  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
+    return errorResponse('Email invitations are not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL on the server.', 503);
+  }
 
   let userClient;
   try {
@@ -77,10 +110,12 @@ export async function POST(request) {
     return errorResponse('Employee provisioning is not configured on the server.', 503);
   }
 
+  const initialPassword = randomBytes(32).toString('base64url');
   const { data: { user: authUser } = {}, error: authError } = await adminClient.auth.admin.createUser({
     email: validation.value.email,
-    password: validation.value.password,
+    password: initialPassword,
     email_confirm: true,
+    user_metadata: { full_name: validation.value.name },
   });
 
   if (authError || !authUser) {
@@ -113,7 +148,34 @@ export async function POST(request) {
     return errorResponse('The employee record could not be created. No login account was left behind.', 500);
   }
 
-  return Response.json({ employee }, { status: 201 });
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+  const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+    type: 'recovery',
+    email: validation.value.email,
+    options: { redirectTo: new URL('/update-password', siteUrl).toString() },
+  });
+  if (linkError || !linkData?.properties?.action_link) {
+    const { error: employeeCleanupError } = await adminClient.from('employees').delete().eq('id', employee.id);
+    const { error: authCleanupError } = await adminClient.auth.admin.deleteUser(authUser.id);
+    if (employeeCleanupError || authCleanupError) console.error('Employee invitation link failed and account cleanup was incomplete.', { employeeCleanupError: employeeCleanupError?.message, authCleanupError: authCleanupError?.message, employeeId: employee.id });
+    return errorResponse(employeeCleanupError || authCleanupError ? 'A password setup link could not be created, and account cleanup needs administrator attention.' : 'A password setup link could not be created. The new employee account was removed.', 500);
+  }
+
+  let emailResult;
+  try {
+    emailResult = await sendEmployeeSetupEmail({ email: validation.value.email, name: validation.value.name, setupUrl: linkData.properties.action_link });
+  } catch (error) {
+    console.error('Employee setup email request failed.', { message: error.message });
+    emailResult = { error: 'The invitation email could not be sent. Check the Resend configuration and try again.' };
+  }
+  if (emailResult.error) {
+    const { error: employeeCleanupError } = await adminClient.from('employees').delete().eq('id', employee.id);
+    const { error: authCleanupError } = await adminClient.auth.admin.deleteUser(authUser.id);
+    if (employeeCleanupError || authCleanupError) console.error('Employee invitation email failed and account cleanup was incomplete.', { employeeCleanupError: employeeCleanupError?.message, authCleanupError: authCleanupError?.message, employeeId: employee.id });
+    return errorResponse(employeeCleanupError || authCleanupError ? `${emailResult.error} Account cleanup needs administrator attention.` : emailResult.error, 502);
+  }
+
+  return Response.json({ employee, email_sent: true }, { status: 201 });
 }
 
 export async function DELETE(request) {

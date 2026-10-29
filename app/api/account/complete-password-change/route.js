@@ -1,7 +1,17 @@
+import { decodeJwtPayload } from '../../../../lib/auth-cookie';
 import { createSupabaseAdminClient, createSupabaseUserClient, getBearerToken } from '../../../../lib/supabase-server';
+
+// Sessions opened from an emailed setup/reset link. Only these may finish setup after the
+// browser set the password itself; a temporary-password sign-in must send a new password.
+const emailLinkMethods = new Set(['recovery', 'otp', 'magiclink', 'invite']);
 
 function errorResponse(message, status) {
   return Response.json({ error: message }, { status });
+}
+
+function signedInFromEmailLink(accessToken) {
+  const amr = decodeJwtPayload(accessToken)?.amr;
+  return Array.isArray(amr) && amr.some((entry) => emailLinkMethods.has(entry?.method));
 }
 
 export async function POST(request) {
@@ -16,8 +26,10 @@ export async function POST(request) {
   }
 
   const password = typeof payload?.password === 'string' ? payload.password : '';
-  if (password.length < 8) return errorResponse('Password must be at least 8 characters.', 400);
-  if (password.length > 128) return errorResponse('Password must be 128 characters or fewer.', 400);
+  const completeSetup = payload?.complete_setup === true;
+  if (!completeSetup && password.length < 8) return errorResponse('Password must be at least 8 characters.', 400);
+  if (!completeSetup && password.length > 128) return errorResponse('Password must be 128 characters or fewer.', 400);
+  if (completeSetup && !signedInFromEmailLink(accessToken)) return errorResponse('Open the password link from your email to finish account setup.', 403);
 
   let userClient;
   let adminClient;
@@ -43,7 +55,19 @@ export async function POST(request) {
     return errorResponse('Your employee account could not be verified.', 500);
   }
   if (!employee) return errorResponse('No employee profile is linked to this account.', 403);
-  if (!employee.must_change_password) return errorResponse('A password change is not required for this account.', 409);
+  if (!employee.must_change_password) return completeSetup ? Response.json({ success: true }) : errorResponse('A password change is not required for this account.', 409);
+
+  if (completeSetup) {
+    const { error: employeeUpdateError } = await adminClient
+      .from('employees')
+      .update({ must_change_password: false })
+      .eq('auth_user_id', user.id);
+    if (employeeUpdateError) {
+      console.error('Password was updated but employee setup state could not be cleared.', { code: employeeUpdateError.code, message: employeeUpdateError.message });
+      return errorResponse('Your password changed, but account setup could not be completed. Please submit the new password again.', 500);
+    }
+    return Response.json({ success: true });
+  }
 
   const { error: passwordError } = await adminClient.auth.admin.updateUserById(user.id, { password });
   if (passwordError) {

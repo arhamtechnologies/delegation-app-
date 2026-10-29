@@ -4,6 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '../../components/Icons';
 import { supabaseBrowser } from '../../lib/supabase-browser';
+import { AuthLayout, AuthMessage } from '../../components/AuthLayout';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Spinner } from '../../components/Loader';
 
 const GENERIC_MESSAGE = 'If an account exists for this email address, a password reset link has been sent.';
 
@@ -34,5 +39,12 @@ export default function ForgotPassword() {
     }
   }
 
-  return <main className="password-change-page"><section className="password-change-card"><div className="mobile-login-logo"><span className="brand-mark"><Icon name="sparkles" size={18} /></span>Delegation</div><div className="password-change-icon"><Icon name="lock" size={21} /></div><span className="eyebrow">Account recovery</span><h1>Reset your password</h1><p className="password-change-intro">Enter your workspace email and we&apos;ll send you a secure link to choose a new password.</p><form className="auth-form" onSubmit={submit}><label htmlFor="reset-email">Email address</label><input id="reset-email" className="input" type="email" autoComplete="email" placeholder="you@company.com" required value={email} onChange={(event) => setEmail(event.target.value)} />{error && <div className="form-error" role="alert"><Icon name="warning" size={16} />{error}</div>}{message && <div className="inline-alert success" role="status"><Icon name="checkCircle" size={16} />{message}</div>}<button className="button button-primary button-full" type="submit" disabled={sending}>{sending ? 'Sending link...' : 'Send reset link'}{!sending && <Icon name="arrowUpRight" size={17} />}</button></form><p className="login-note"><Link href="/login">Back to sign in</Link></p></section></main>;
+  return <AuthLayout eyebrow="Account recovery" title="Reset your password" description="Enter your workspace email and we&apos;ll send you a secure link to choose a new password." footer={<Link className="font-medium text-brand hover:underline" href="/login">Back to sign in</Link>}>
+    <form className="grid gap-4" onSubmit={submit}>
+      <div className="grid gap-2"><Label htmlFor="reset-email">Email address</Label><Input id="reset-email" className="h-11 text-base sm:h-10 sm:text-sm" type="email" autoComplete="email" inputMode="email" placeholder="you@company.com" required value={email} onChange={(event) => setEmail(event.target.value)} /></div>
+      {error && <AuthMessage>{error}</AuthMessage>}
+      {message && <AuthMessage tone="success">{message}</AuthMessage>}
+      <Button className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm" type="submit" disabled={sending}>{sending ? <><Spinner />Sending link...</> : 'Send reset link'}{!sending && <Icon name="arrowUpRight" size={17} />}</Button>
+    </form>
+  </AuthLayout>;
 }

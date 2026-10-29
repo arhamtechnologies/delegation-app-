@@ -4,8 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
-import { clearAuthCache, syncAuthSession } from '../../lib/auth';
+import { clearAuthCache, getAccessToken, syncAuthSession } from '../../lib/auth';
 import { supabaseBrowser, supabaseRecoveryBrowser } from '../../lib/supabase-browser';
+import { AuthLayout, AuthMessage, AuthNote } from '../../components/AuthLayout';
+import { Loader, Spinner } from '../../components/Loader';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const INVALID_LINK_MESSAGE = 'This password reset link is invalid or has expired. Please request a new password reset link.';
 
@@ -124,13 +129,42 @@ export default function UpdatePassword() {
       setSaving(false);
       return;
     }
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      setError('Your password changed, but account setup could not be completed. Please sign in and contact your administrator.');
+      setSaving(false);
+      return;
+    }
+    try {
+      const response = await fetch('/api/account/complete-password-change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ complete_setup: true }),
+      });
+      if (!response.ok) {
+        setError('Your password changed, but account setup could not be completed. Please try again or contact your administrator.');
+        setSaving(false);
+        return;
+      }
+    } catch {
+      setError('Your password changed, but account setup could not be completed. Please try again.');
+      setSaving(false);
+      return;
+    }
     await supabaseBrowser().auth.signOut({ scope: 'local' });
     clearAuthCache();
     router.replace('/login?reset=success');
     router.refresh();
   }
 
-  if (checking) return <main className="auth-loading-shell" role="status">Validating your reset link...</main>;
+  if (checking) return <Loader fullScreen label="Validating your reset link..." />;
 
-  return <main className="password-change-page"><section className="password-change-card"><div className="mobile-login-logo"><span className="brand-mark"><Icon name="sparkles" size={18} /></span>Delegation</div><div className="password-change-icon"><Icon name="lock" size={21} /></div><span className="eyebrow">Account recovery</span><h1>{ready ? 'Set a new password' : 'Reset link expired'}</h1>{ready ? <><p className="password-change-intro">Enter a new password for your account.</p><form className="auth-form" onSubmit={submit}><label htmlFor="update-password">New password</label><div className="input-with-icon"><Icon name="lock" size={17} /><input id="update-password" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={password} onChange={(event) => setPassword(event.target.value)} /></div><label htmlFor="update-password-confirmation">Confirm new password</label><div className="input-with-icon"><Icon name="lock" size={17} /><input id="update-password-confirmation" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>{error && <div className="form-error" role="alert"><Icon name="warning" size={16} />{error}</div>}<button className="button button-primary button-full" type="submit" disabled={saving}>{saving ? 'Updating password...' : 'Update password'}{!saving && <Icon name="arrowUpRight" size={17} />}</button></form></> : <><p className="password-change-intro">{INVALID_LINK_MESSAGE}</p><Link className="button button-primary button-full" href="/forgot-password">Request a new reset link<Icon name="arrowUpRight" size={17} /></Link></>} {!ready && <p className="login-note"><Link href="/login">Back to sign in</Link></p>}<p className="login-note"><Icon name="shield" size={14} />Your password is protected by Supabase Auth.</p></section></main>;
+  return <AuthLayout eyebrow="Account recovery" title={ready ? 'Set a new password' : 'Reset link expired'} description={ready ? 'Enter a new password for your account.' : INVALID_LINK_MESSAGE} footer={<>{!ready && <Link className="font-medium text-brand hover:underline" href="/login">Back to sign in</Link>}<AuthNote /></>}>
+    {ready ? <form className="grid gap-4" onSubmit={submit}>
+      <div className="grid gap-2"><Label htmlFor="update-password">New password</Label><Input id="update-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={password} onChange={(event) => setPassword(event.target.value)} /><p className="text-xs text-muted-foreground">At least 8 characters.</p></div>
+      <div className="grid gap-2"><Label htmlFor="update-password-confirmation">Confirm new password</Label><Input id="update-password-confirmation" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>
+      {error && <AuthMessage>{error}</AuthMessage>}
+      <Button className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm" type="submit" disabled={saving}>{saving ? <><Spinner />Updating password...</> : 'Update password'}{!saving && <Icon name="arrowUpRight" size={17} />}</Button>
+    </form> : <Button asChild className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm"><Link href="/forgot-password">Request a new reset link<Icon name="arrowUpRight" size={17} /></Link></Button>}
+  </AuthLayout>;
 }

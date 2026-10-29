@@ -34,6 +34,7 @@ export function Icon({ name, size = 18, strokeWidth = 1.8, className = '' }) {
     edit: <><path {...common} d="m4 16-.8 4.8L8 20l11-11a2.8 2.8 0 0 0-4-4L4 16Z" /><path {...common} d="m13.5 6.5 4 4" /></>,
     lock: <><rect {...common} x="4" y="10" width="16" height="11" rx="2" /><path {...common} d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
     trend: <><path {...common} d="M4 17 9 12l3 3 7-8" /><path {...common} d="M15 7h4v4" /></>,
+    upload: <><path {...common} d="M12 16V4M7 9l5-5 5 5M5 20h14" /></>,
     list: <><path {...common} d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" /></>,
   };
 

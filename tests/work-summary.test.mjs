@@ -49,17 +49,17 @@ test('16. MIS preserves nonzero task/checklist totals and employee-wise rows fro
 });
 
 test('17. MIS loading does not mask RPC failures with zero totals', async () => {
-  const source = await readFile(new URL('../app/mis/page.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../app/mis/MisView.js', import.meta.url), 'utf8');
   assert.match(source, /if \(response\.error\) throw response\.error;/);
-  assert.match(source, /if \(!response\.data\?\.summary \|\| !Array\.isArray\(response\.data\.employees\)\)/);
+  assert.match(source, /if \(!response\.data\?\.counts \|\| !Array\.isArray\(response\.data\.employeeRows\)\)/);
   assert.doesNotMatch(source, /setCounts\(response\.data\?\.summary \|\| \{ total: 0/);
   assert.match(source, /console\.error\('\[mis\] report load failed'/);
 });
 
 test('18. selected MIS employee uses the same scoped totals in every report panel', async () => {
-  const source = await readFile(new URL('../app/mis/page.js', import.meta.url), 'utf8');
-  assert.match(source, /const value = reportCounts\[key\];/);
-  assert.doesNotMatch(source, /const value = counts\[key\];/);
-  assert.match(source, /<strong>\{reportCounts\.tasks\}<\/strong>/);
-  assert.match(source, /<strong>\{reportCounts\.checklist\}<\/strong>/);
+  const source = await readFile(new URL('../app/mis/MisView.js', import.meta.url), 'utf8');
+  assert.match(source, /reportCounts\[key\]/);
+  assert.doesNotMatch(source, /\bcounts\[key\]/);
+  assert.match(source, /\{reportCounts\.tasks \|\| 0\}/);
+  assert.match(source, /\{reportCounts\.checklist \|\| 0\}/);
 });
