@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
 import { clearAuthCache, getAccessToken, getCurrentEmployee } from '../../lib/auth';
 import { AuthLayout, AuthMessage, AuthNote } from '../../components/AuthLayout';
-import { Loader } from '../../components/Loader';
+import { Loader, Spinner } from '../../components/Loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -91,7 +91,7 @@ export default function ChangePassword() {
       <div className="grid gap-2"><Label htmlFor="new-password">New password</Label><Input id="new-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={password} onChange={(event) => setPassword(event.target.value)} /><p className="text-xs text-muted-foreground">At least 8 characters.</p></div>
       <div className="grid gap-2"><Label htmlFor="confirm-password">Confirm new password</Label><Input id="confirm-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>
       {error && <AuthMessage>{error}</AuthMessage>}
-      <Button className="mt-2 h-11 w-full text-[15px] sm:h-10 sm:text-sm" type="submit" disabled={saving}>{saving ? 'Updating password...' : 'Set new password'}{!saving && <Icon name="arrowUpRight" size={17} />}</Button>
+      <Button className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm" type="submit" disabled={saving}>{saving ? <><Spinner />Updating password...</> : 'Set new password'}{!saving && <Icon name="arrowUpRight" size={17} />}</Button>
     </form>
   </AuthLayout>;
 }

@@ -28,17 +28,34 @@ export const toneClasses = {
   green: 'bg-emerald-50 text-emerald-700',
   mint: 'bg-emerald-50 text-emerald-700',
   orange: 'bg-amber-50 text-amber-700',
+  violet: 'bg-violet-50 text-violet-700',
   slate: 'bg-muted text-muted-foreground',
 };
 
 export function StatusBadge({ status = 'pending', compact = false }) {
   const meta = statusMeta[status] || statusMeta.pending;
-  return <Badge className={cn('badge h-6 gap-1 px-2 text-xs font-semibold', compact && 'h-[22px] px-1.5 text-[11px]', toneClasses[meta.tone])}><Icon name={meta.icon} size={compact ? 13 : 14} />{meta.label}</Badge>;
+  return <Badge className={cn('badge h-6 gap-1 px-2 text-xs font-semibold', compact && 'h-[22px] px-1.5 text-[12px]', toneClasses[meta.tone])}><Icon name={meta.icon} size={compact ? 13 : 14} />{meta.label}</Badge>;
 }
 
 export function PriorityBadge({ priority = 'normal' }) {
   const meta = priorityMeta[priority] || priorityMeta.normal;
-  return <Badge className={cn('badge h-[22px] gap-1.5 px-2 text-[11px] font-semibold', toneClasses[meta.tone])}><span className="size-1.5 rounded-full bg-current" />{meta.label}</Badge>;
+  return <Badge className={cn('badge h-[22px] gap-1.5 px-2 text-[12px] font-semibold', toneClasses[meta.tone])}><span className="size-1.5 rounded-full bg-current" />{meta.label}</Badge>;
+}
+
+export const roleMeta = {
+  super_admin: { label: 'Super admin', tone: 'purple' },
+  assigner: { label: 'Assigner', tone: 'blue' },
+  ea: { label: 'Executive assistant', tone: 'violet' },
+  doer: { label: 'Doer', tone: 'slate' },
+};
+
+export function roleLabel(role) {
+  return roleMeta[role]?.label || 'Workspace member';
+}
+
+export function RoleBadge({ role }) {
+  const meta = roleMeta[role] || roleMeta.doer;
+  return <Badge className={cn('badge h-[22px] w-fit shrink-0 gap-1.5 px-2 text-[12px] font-semibold whitespace-nowrap', toneClasses[meta.tone])}><span className="size-1.5 rounded-full bg-current" />{meta.label}</Badge>;
 }
 
 export function Avatar({ name = 'User', size = 'md' }) {
@@ -68,7 +85,7 @@ export function EmptyState({ icon = 'inbox', title, description, action, href, o
 export function SectionHeader({ eyebrow, title, description, action, href }) {
   return <div className="section-header mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div className="min-w-0">
-      {eyebrow && <div className="mb-1 text-[11px] font-semibold tracking-[.08em] text-brand uppercase">{eyebrow}</div>}
+      {eyebrow && <div className="mb-1 text-[12px] font-semibold tracking-[.08em] text-brand uppercase">{eyebrow}</div>}
       <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">{title}</h2>
       {description && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</p>}
     </div>
@@ -100,16 +117,19 @@ export function Modal({ open, title, description, onClose, children, wide = fals
   </Dialog>;
 }
 
+// Workspace time zone keeps server and browser output identical (no hydration drift).
+const WORKSPACE_TIME_ZONE = 'Asia/Kolkata';
+
 export function formatDate(value, options = { month: 'short', day: 'numeric', year: 'numeric' }) {
   if (!value) return 'No date';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleDateString(undefined, options);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? new Date(`${value}T12:00:00+05:30`) : new Date(value);
+  return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleDateString('en-US', { timeZone: WORKSPACE_TIME_ZONE, ...options });
 }
 
 export function formatDateTime(value) {
   if (!value) return 'No date';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleString('en-US', { timeZone: WORKSPACE_TIME_ZONE, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export function relativeTime(value) {

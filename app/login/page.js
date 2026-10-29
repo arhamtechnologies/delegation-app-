@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { clearAuthCache, getCurrentEmployee, syncAuthSession } from '../../lib/auth';
 import { supabaseBrowser } from '../../lib/supabase-browser';
 import { AuthLayout, AuthMessage, AuthNote } from '../../components/AuthLayout';
-import { Loader } from '../../components/Loader';
+import { Loader, Spinner } from '../../components/Loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -83,7 +83,7 @@ export default function Login() {
       <div className="grid gap-2"><Label htmlFor="email">Email</Label><Input id="email" className="h-11 text-base sm:h-10 sm:text-sm" type="email" autoComplete="email" inputMode="email" placeholder="you@company.com" required value={email} onChange={(event) => setEmail(event.target.value)} /></div>
       <div className="grid gap-2"><div className="flex items-center justify-between"><Label htmlFor="password">Password</Label><Link className="text-sm font-medium text-brand hover:underline" href="/forgot-password">Forgot password?</Link></div><Input id="password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="current-password" placeholder="Enter your password" required value={password} onChange={(event) => setPassword(event.target.value)} /></div>
       {error && <AuthMessage>{error}</AuthMessage>}
-      <Button className="mt-2 h-11 w-full text-[15px] sm:h-10 sm:text-sm" type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</Button>
+      <Button className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm" type="submit" disabled={loading}>{loading ? <><Spinner />Signing in...</> : 'Sign in'}</Button>
     </form>
   </AuthLayout>;
 }

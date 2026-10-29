@@ -16,7 +16,7 @@ export function BrandLogo({ className, subtitle }) {
   return <span className={cn('inline-flex min-w-0 items-center gap-2.5', className)}>
     <BrandBadge />
     <span className="flex min-w-0 flex-col leading-tight">
-      <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">Delegation</span>
+      <span className="truncate text-[16px] font-semibold tracking-tight text-foreground">Delegation</span>
       {subtitle && <span className="truncate text-xs text-muted-foreground">{subtitle}</span>}
     </span>
   </span>;

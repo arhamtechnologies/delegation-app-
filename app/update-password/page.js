@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
-import { clearAuthCache, syncAuthSession } from '../../lib/auth';
+import { clearAuthCache, getAccessToken, syncAuthSession } from '../../lib/auth';
 import { supabaseBrowser, supabaseRecoveryBrowser } from '../../lib/supabase-browser';
 import { AuthLayout, AuthMessage, AuthNote } from '../../components/AuthLayout';
-import { Loader } from '../../components/Loader';
+import { Loader, Spinner } from '../../components/Loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -129,6 +129,28 @@ export default function UpdatePassword() {
       setSaving(false);
       return;
     }
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      setError('Your password changed, but account setup could not be completed. Please sign in and contact your administrator.');
+      setSaving(false);
+      return;
+    }
+    try {
+      const response = await fetch('/api/account/complete-password-change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ complete_setup: true }),
+      });
+      if (!response.ok) {
+        setError('Your password changed, but account setup could not be completed. Please try again or contact your administrator.');
+        setSaving(false);
+        return;
+      }
+    } catch {
+      setError('Your password changed, but account setup could not be completed. Please try again.');
+      setSaving(false);
+      return;
+    }
     await supabaseBrowser().auth.signOut({ scope: 'local' });
     clearAuthCache();
     router.replace('/login?reset=success');
@@ -142,7 +164,7 @@ export default function UpdatePassword() {
       <div className="grid gap-2"><Label htmlFor="update-password">New password</Label><Input id="update-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={password} onChange={(event) => setPassword(event.target.value)} /><p className="text-xs text-muted-foreground">At least 8 characters.</p></div>
       <div className="grid gap-2"><Label htmlFor="update-password-confirmation">Confirm new password</Label><Input id="update-password-confirmation" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>
       {error && <AuthMessage>{error}</AuthMessage>}
-      <Button className="mt-2 h-11 w-full text-[15px] sm:h-10 sm:text-sm" type="submit" disabled={saving}>{saving ? 'Updating password...' : 'Update password'}{!saving && <Icon name="arrowUpRight" size={17} />}</Button>
-    </form> : <Button asChild className="mt-2 h-11 w-full text-[15px] sm:h-10 sm:text-sm"><Link href="/forgot-password">Request a new reset link<Icon name="arrowUpRight" size={17} /></Link></Button>}
+      <Button className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm" type="submit" disabled={saving}>{saving ? <><Spinner />Updating password...</> : 'Update password'}{!saving && <Icon name="arrowUpRight" size={17} />}</Button>
+    </form> : <Button asChild className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm"><Link href="/forgot-password">Request a new reset link<Icon name="arrowUpRight" size={17} /></Link></Button>}
   </AuthLayout>;
 }

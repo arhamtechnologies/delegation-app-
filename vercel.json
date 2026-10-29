@@ -1,5 +1,11 @@
 {
+  "regions": [
+    "syd1"
+  ],
   "crons": [
-    { "path": "/api/checklist/generate", "schedule": "30 0 * * *" }
+    {
+      "path": "/api/checklist/generate",
+      "schedule": "30 0 * * *"
+    }
   ]
 }

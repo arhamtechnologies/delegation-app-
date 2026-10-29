@@ -12,7 +12,7 @@ export function AuthLayout({ title, description, eyebrow, children, footer }) {
       <BrandLogo className="self-center" subtitle="Task delegation & follow-up" />
       <Card className="gap-6 py-7 shadow-sm ring-border sm:py-8">
         <CardHeader className="gap-1.5 px-6 sm:px-8">
-          {eyebrow && <span className="text-[11px] font-semibold tracking-[.08em] text-brand uppercase">{eyebrow}</span>}
+          {eyebrow && <span className="text-[12px] font-semibold tracking-[.08em] text-brand uppercase">{eyebrow}</span>}
           <CardTitle className="text-2xl font-semibold tracking-tight">{title}</CardTitle>
           {description && <CardDescription className="text-sm leading-relaxed">{description}</CardDescription>}
         </CardHeader>

@@ -73,7 +73,9 @@ Open `http://localhost:3000` and test login, employee creation and task creation
 6. Add `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, and `CHECKLIST_TIMEZONE` to Vercel. `CRON_SECRET` must be a long random value; Vercel Cron sends it to `/api/checklist/generate` automatically.
 7. After deployment, open the Vercel URL and test login and Checklist generation.
 
-Password recovery also requires `SUPABASE_SERVICE_ROLE_KEY` in Vercel as a server-only variable. Never create a `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` variable or expose the service-role key to client code. In Supabase Auth, set the Site URL to `https://delegation.arham.app` and allow the redirect URL `https://delegation.arham.app/update-password`.
+Password recovery also requires `SUPABASE_SERVICE_ROLE_KEY` in Vercel as a server-only variable. Never create a `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` variable or expose the service-role key to client code. In Supabase Auth, set the Site URL to `https://task.arham.app` and allow the redirect URL `https://task.arham.app/update-password`.
+
+Employee invitations require `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in the server environment. The sender must be verified in Resend. Set `NEXT_PUBLIC_SITE_URL` to the deployed app origin so password setup links return to the correct site. Employee creation uses the signed-in employee's `super_admin`, `assigner`, or `ea` role and sends a secure password setup link; no temporary password is sent.
 
 ## 6. Custom domain
 In Vercel Project → Settings → Domains, add the required domain. At the DNS provider, add exactly the record Vercel displays. Do not delete the old production DNS until the new deployment is tested.

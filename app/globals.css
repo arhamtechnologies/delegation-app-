@@ -102,6 +102,7 @@
   }
   html {
     @apply font-sans;
+    font-size: 17px;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
   }
@@ -110,5 +111,12 @@
   }
   ::selection {
     background: var(--brand-tint);
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

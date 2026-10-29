@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { Icon } from './Icons';
-import { Loader } from './Loader';
+import { Loader, Spinner } from './Loader';
 import { EmptyState, Modal, SectionHeader } from './UI';
 import { getAccessToken, getCurrentEmployee } from '../lib/auth';
 import { classifyEmployeeLeave } from '../lib/calendar-leave.mjs';
 import { canDeactivateNonWorkingDayTasks, formatEmployeeId } from '../lib/checklist-data';
 import { defaultChecklistTimeZone, getChecklistBusinessDate, getTodayInIndia } from '../lib/checklist-time';
 import { supabaseBrowser } from '../lib/supabase-browser';
+import { isFreshRender } from '../lib/page-data';
 
 function formatSelectedDate(value) {
   return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00Z`));
@@ -52,7 +53,7 @@ function NationalHolidayModal({ open, editing, form, onChange, onClose, onSave, 
         <label className="checkbox-field field-wide"><input type="checkbox" checked={form.is_active} onChange={(event) => onChange('is_active', event.target.checked)} /><span><strong>Enabled</strong><small>Disabled records remain available for history but do not trigger previews.</small></span></label>
       </div>
       {error && <div className="form-error" role="alert"><Icon name="warning" size={16} />{error}</div>}
-      <div className="modal-actions"><button className="button button-ghost" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Saving...' : editing ? 'Save holiday' : 'Add holiday'}{!saving && <Icon name="arrowUpRight" size={16} />}</button></div>
+      <div className="modal-actions"><button className="button button-ghost" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}>{saving ? <><Spinner />Saving...</> : editing ? 'Save holiday' : 'Add holiday'}{!saving && <Icon name="arrowUpRight" size={16} />}</button></div>
     </form>
   </Modal>;
 }
@@ -66,7 +67,7 @@ function EmployeeLeaveModal({ open, leaveWorkingEmployees, leaveEmployeeId, onLe
   return <Modal open={open} title="Employee Leave" description="Select an employee and the dates they will be away." onClose={onClose}>
     <div className="non-working-day-form">
       <div className="field"><label htmlFor="non-working-day-reason">Reason<span>*</span></label><div id="non-working-day-reason" className="input employee-leave-reason" aria-readonly="true">Employee Leave</div></div>
-      <section className="non-working-day-config"><div className="field"><label htmlFor="non-working-day-employee">Employee<span>*</span></label><select id="non-working-day-employee" className="input" value={leaveEmployeeId} onChange={(event) => onLeaveEmployeeChange(event.target.value)}><option value="">Select employee</option>{leaveWorkingEmployees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div><div className="field"><label htmlFor="non-working-day-leave-date">Dates<span>*</span></label><div className="non-working-day-add-date"><input id="non-working-day-leave-date" className="input" type="date" value={leaveDateInput} onChange={onLeaveDateInputChange} /><button className="button button-ghost button-small" type="button" onClick={onAddLeaveDate}>+ Add date</button></div><DateChips dates={leaveDates} onRemove={onRemoveLeaveDate} /></div><button className="button button-primary" type="button" onClick={onSave} disabled={saving || !leaveEmployeeId || !leaveDates.length}>{saving ? 'Saving...' : 'Save leave dates'}</button></section>
+      <section className="non-working-day-config"><div className="field"><label htmlFor="non-working-day-employee">Employee<span>*</span></label><select id="non-working-day-employee" className="input" value={leaveEmployeeId} onChange={(event) => onLeaveEmployeeChange(event.target.value)}><option value="">Select employee</option>{leaveWorkingEmployees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div><div className="field"><label htmlFor="non-working-day-leave-date">Dates<span>*</span></label><div className="non-working-day-add-date"><input id="non-working-day-leave-date" className="input" type="date" value={leaveDateInput} onChange={onLeaveDateInputChange} /><button className="button button-ghost button-small" type="button" onClick={onAddLeaveDate}>+ Add date</button></div><DateChips dates={leaveDates} onRemove={onRemoveLeaveDate} /></div><button className="button button-primary" type="button" onClick={onSave} disabled={saving || !leaveEmployeeId || !leaveDates.length}>{saving ? <><Spinner />Saving...</> : 'Save leave dates'}</button></section>
       {error && <div className="form-error" role="alert"><Icon name="warning" size={16} />{error}</div>}
     </div>
   </Modal>;
@@ -89,12 +90,12 @@ function EarlierLeaveModal({ open, entries, totalCount, search, fromDate, toDate
   </Modal>;
 }
 
-export default function CalendarSettings() {
-  const [employee, setEmployee] = useState(null);
-  const [employees, setEmployees] = useState([]);
-  const [holidays, setHolidays] = useState([]);
-  const [employeeLeave, setEmployeeLeave] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function CalendarSettings({ initialData }) {
+  const [employee, setEmployee] = useState(initialData?.employee || null);
+  const [employees, setEmployees] = useState(initialData?.employees || []);
+  const [holidays, setHolidays] = useState(initialData?.holidays || []);
+  const [employeeLeave, setEmployeeLeave] = useState(initialData?.employeeLeave || []);
+  const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [holidayError, setHolidayError] = useState('');
@@ -133,7 +134,7 @@ export default function CalendarSettings() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!isFreshRender(initialData)) load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addDate(setDates, value, clear) { if (!value) return; setDates((current) => [...new Set([...current, value])].sort()); clear(''); }
   function openEmployeeLeaveConfig(group = null) { setLeaveEmployeeId(group?.employeeId || ''); setLeaveEditingEmployeeId(group?.employeeId || ''); setLeaveDates(group?.dates || []); setLeaveDateInput(''); setError(''); setEmployeeLeaveModalOpen(true); }

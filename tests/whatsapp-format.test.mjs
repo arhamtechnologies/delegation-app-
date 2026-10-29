@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatChecklistLine, formatList, formatMisReport, formatTaskLine, formatTemplateLine, resolveAssigneeName } from '../lib/wa/format.mjs';
+import { formatChecklistLine, formatList, formatMisReport, formatDashboardStats, formatTodayWork, formatTaskLine, formatTemplateLine, resolveAssigneeName } from '../lib/wa/format.mjs';
 import { formatDailyUpdate } from '../lib/wa/updates.mjs';
 
 test('wa format 1: long lists are cut at 15 rows and stay under the WhatsApp cap', () => {
@@ -57,4 +57,36 @@ test('wa format 5: daily update shows checklist counts when given', () => {
   const base = { date: '2026-10-27', isToday: true, created: [], completed: [], dueOpen: [], overdue: [], followup: [], remarks: [] };
   assert.match(formatDailyUpdate({ ...base, checklist: { done: 3, pending: 2, overdue: 1 } }), /Checklist: done 3 · pending 2 · overdue 1/);
   assert.doesNotMatch(formatDailyUpdate(base), /Checklist:/);
+});
+
+test('wa today work: team view groups by person, person view groups by status', () => {
+  const items = [
+    { who: 'Varun', title: 'GST filing', status: 'overdue', due: 'Today, 10:00 AM', checklist: false },
+    { who: 'Varun', title: 'Bin audit', status: 'pending', due: 'Today, 5:00 PM', checklist: true },
+    { who: 'Monika', title: 'Call vendor', status: 'pending', due: 'Today, 4:00 PM', checklist: false },
+  ];
+  const team = formatTodayWork({ items, statuses: ['overdue', 'pending'] });
+  assert.match(team, /Overdue & pending today\n1 overdue · 2 pending/);
+  assert.ok(team.indexOf('*Varun (2)*') < team.indexOf('*Monika (1)*'));
+  assert.match(team, /Bin audit \(checklist\) — pending, Today, 5:00 PM/);
+  const person = formatTodayWork({ items: items.slice(0, 2), statuses: ['overdue', 'pending'], person: 'Varun' });
+  assert.match(person, /— Varun/);
+  assert.match(formatTodayWork({ items: [items[0]], statuses: ['overdue'], earlierOverdue: 135 }), /Also 135 overdue from earlier days/);
+  assert.match(person, /\*Overdue \(1\)\*\n• GST filing — Today, 10:00 AM/);
+  assert.match(formatTodayWork({ items: [], statuses: ['overdue'] }), /Nothing overdue today\./);
+});
+
+test('wa dashboard stats: totals, per person, assigned today', () => {
+  const text = formatDashboardStats({
+    date: '2026-10-28',
+    summary: { total: 52, pending: 17, overdue: 1, completed: 34, tasks: 1, checklist: 51 },
+    rows: [{ employee_name: 'Gulshan', total_work: 5, completed_work: 3, pending_work: 1, overdue_work: 1 }, { employee_name: 'Monika', total_work: 4, completed_work: 4, pending_work: 0, overdue_work: 0 }],
+    assigned: { total: 3, byPerson: [['Varun', 2], ['Monika', 1]] },
+    earlierOverdue: 135,
+  });
+  assert.match(text, /Total 52 · Pending 17 · Overdue 1 · Completed 34/);
+  assert.ok(text.indexOf('Gulshan') < text.indexOf('Monika'));
+  assert.match(text, /Assigned today \(3\)\*\n• Varun: 2/);
+  assert.match(text, /Also 135 overdue from earlier days/);
+  assert.match(formatDashboardStats({ date: '2026-10-28', summary: { total: 0, pending: 0, overdue: 0, completed: 0, tasks: 0, checklist: 0 }, rows: [], assigned: { total: 0, byPerson: [] } }), /No new tasks assigned today/);
 });

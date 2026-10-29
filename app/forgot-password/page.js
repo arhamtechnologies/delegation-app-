@@ -8,6 +8,7 @@ import { AuthLayout, AuthMessage } from '../../components/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '../../components/Loader';
 
 const GENERIC_MESSAGE = 'If an account exists for this email address, a password reset link has been sent.';
 
@@ -43,7 +44,7 @@ export default function ForgotPassword() {
       <div className="grid gap-2"><Label htmlFor="reset-email">Email address</Label><Input id="reset-email" className="h-11 text-base sm:h-10 sm:text-sm" type="email" autoComplete="email" inputMode="email" placeholder="you@company.com" required value={email} onChange={(event) => setEmail(event.target.value)} /></div>
       {error && <AuthMessage>{error}</AuthMessage>}
       {message && <AuthMessage tone="success">{message}</AuthMessage>}
-      <Button className="mt-2 h-11 w-full text-[15px] sm:h-10 sm:text-sm" type="submit" disabled={sending}>{sending ? 'Sending link...' : 'Send reset link'}{!sending && <Icon name="arrowUpRight" size={17} />}</Button>
+      <Button className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm" type="submit" disabled={sending}>{sending ? <><Spinner />Sending link...</> : 'Send reset link'}{!sending && <Icon name="arrowUpRight" size={17} />}</Button>
     </form>
   </AuthLayout>;
 }
