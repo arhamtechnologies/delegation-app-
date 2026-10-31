@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 import { getCurrentEmployee, peekCurrentEmployee } from '../../../../lib/auth';
 import { addChecklistItemUpdate, canCompleteChecklist, checklistFrequencies, formatChecklistDueAt, getChecklistStatus, setChecklistCompletion } from '../../../../lib/checklist-data';
 import { isFreshRender, loadChecklistDetail } from '../../../../lib/page-data';
+import { isProofUpdate } from '../../../../lib/task-proofs';
+import { ProofDialog, ProofPanel, ProofThumb } from '../../../../components/TaskProof';
 
 const statusLabels = { pending: 'Pending', overdue: 'Overdue', completed: 'Completed', deactivated: 'Deactivated' };
 const statusNotes = {
@@ -33,6 +35,7 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
   const [loading, setLoading] = useState(!initialData);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [proofMode, setProofMode] = useState(null);
 
   const load = useCallback(async ({ background = false } = {}) => {
     if (!id) return;
@@ -53,14 +56,21 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
     const currentStatus = getChecklistStatus(item);
     if (!item || !canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) || currentStatus === 'deactivated') return;
     const previous = item;
-    const completing = currentStatus !== 'completed';
+    if (currentStatus !== 'completed') { setProofMode('complete'); return; } // the dialog offers an optional screenshot
     setSaving(true);
     setError('');
-    setItem((current) => ({ ...current, status: completing ? 'completed' : 'pending', completed_at: completing ? new Date().toISOString() : null }));
-    const { error: updateError } = await setChecklistCompletion(item.id, completing);
+    setItem((current) => ({ ...current, status: 'pending', completed_at: null }));
+    const { error: updateError } = await setChecklistCompletion(item.id, false);
     if (updateError) { setItem(previous); setError(updateError.message); }
     else load({ background: true });
     setSaving(false);
+  }
+
+  function proofSaved({ update, completed }) {
+    if (update) setUpdates((current) => [...current, update]);
+    if (completed) setItem((current) => ({ ...current, status: 'completed', completed_at: new Date().toISOString() }));
+    setProofMode(null);
+    load({ background: true });
   }
 
   async function addRemark(text) {
@@ -77,6 +87,7 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
 
   const status = getChecklistStatus(item);
   const canComplete = canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) && status !== 'deactivated';
+  const proofs = updates.filter((update) => isProofUpdate(update) && !update.pending);
   return <div className={pageContainerClass}>
     <div className="mb-4 flex items-center justify-between gap-3">
       {back}
@@ -101,7 +112,11 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
             <Property label="Rule starts">{formatDate(item.template?.start_date || item.due_date)}</Property>
           </PropertyList>
         </Surface>
+        {(canComplete || proofs.length > 0) && <Surface>{canComplete
+          ? <ProofPanel proofs={proofs} onAdd={() => setProofMode('attach')} />
+          : <div className="grid gap-2 p-3"><h2 className="text-[14px] font-semibold text-foreground">Proof screenshots</h2><div className="flex flex-wrap gap-2">{proofs.map((proof) => <ProofThumb key={proof.id} path={proof.proof_url} />)}</div></div>}</Surface>}
       </aside>
     </div>
+    <ProofDialog target={proofMode ? { kind: 'checklist', id: item.id, title: item.task } : null} mode={proofMode || 'complete'} onClose={() => setProofMode(null)} onDone={proofSaved} />
   </div>;
 }
