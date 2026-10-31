@@ -59,3 +59,9 @@ test('wa execute 5: non-managers cannot execute anything', async () => {
   assert.deepEqual(lines, ['❌ Failed: Cancel #3']);
   assert.equal(calls.length, 0);
 });
+
+test('wa execute 6: closing a proof-mandatory task with no screenshot reports why instead of a generic failure', async () => {
+  const { admin } = stubAdmin({ data: null, error: { code: 'P0001', hint: 'proof_required', message: 'Add a proof screenshot before completing this task.' } });
+  const lines = await executeProposals(admin, actor, [{ kind: 'task_status', taskId: 't1', shortCode: 7, label: 'Mark completed: "GST"', patch: { status: 'closed' } }], {});
+  assert.deepEqual(lines, ['❌ #7 needs a proof screenshot first (proof is mandatory). Add it in the app.']);
+});

@@ -14,6 +14,7 @@ import { isFreshRender, loadDashboardData } from '../../lib/page-data';
 import { canCompleteTask, setTaskCompletion } from '../../lib/task-data';
 import { getWorkItemStatus, sortWorkItemsChronologically } from '../../lib/work-data';
 import { ProofDialog, ProofPrompt } from '../../components/TaskProof';
+import { isProofRequiredError } from '../../lib/task-proofs';
 
 const DASHBOARD_PAGE = 20;
 
@@ -35,6 +36,7 @@ export default function DashboardView({ initialData }) {
   const [completing, setCompleting] = useState(null);
   const [justCompleted, setJustCompleted] = useState(null);
   const [proofTarget, setProofTarget] = useState(null);
+  const [requiredProof, setRequiredProof] = useState(null);
   const [visibleCount, setVisibleCount] = useState({ overdue: DASHBOARD_PAGE, pending: DASHBOARD_PAGE, completed: DASHBOARD_PAGE });
   const abortRef = useRef(null);
 
@@ -91,7 +93,7 @@ export default function DashboardView({ initialData }) {
     mapGroups(markWorkItemCompleted);
     const { error: updateError } = await (workItem.kind === 'checklist' ? setChecklistCompletion(workItem.id) : setTaskCompletion(workItem.id, true));
     // Revert just this row so a refresh that landed meanwhile is not thrown away.
-    if (updateError) { mapGroups(() => workItem); setError(updateError.message); }
+    if (updateError) { mapGroups(() => workItem); if (workItem.kind === 'task' && isProofRequiredError(updateError)) { setJustCompleted(null); setRequiredProof({ kind: 'task', id: workItem.id, title: workItem.title }); } else setError(updateError.message); }
     else setJustCompleted({ kind: workItem.kind, id: workItem.id, title: workItem.title });
     setCompleting(null);
     if (!updateError) load();
@@ -129,5 +131,6 @@ export default function DashboardView({ initialData }) {
       </>}
     </Surface>
     <ProofDialog target={proofTarget} mode="attach" onClose={() => setProofTarget(null)} onDone={() => { setProofTarget(null); setJustCompleted(null); }} />
+    <ProofDialog target={requiredProof} mode="complete" required onClose={() => setRequiredProof(null)} onDone={() => { setRequiredProof(null); load(); }} />
   </AppShell>;
 }

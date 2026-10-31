@@ -15,7 +15,7 @@ import { getAuthenticatedUser } from '../../../lib/auth';
 import { isFreshRender, loadTaskDetail } from '../../../lib/page-data';
 import { formatTaskDeadline, getTaskStatus, setTaskCompletion } from '../../../lib/task-data';
 import { supabaseBrowser } from '../../../lib/supabase-browser';
-import { isProofUpdate } from '../../../lib/task-proofs';
+import { isProofUpdate, taskHasProof } from '../../../lib/task-proofs';
 import { ProofDialog, ProofPanel } from '../../../components/TaskProof';
 
 const statusLabels = { pending: 'Pending', overdue: 'Overdue', completed: 'Completed' };
@@ -137,12 +137,12 @@ export default function TaskDetailView({ id, initialData }) {
             <Property label="Due"><span className={cn(taskStatus === 'overdue' && 'font-medium text-destructive')}>{formatTaskDeadline(task, { includeYear: true })}</span></Property>
             <Property label="Start">{formatDate(task.start_date)}</Property>
             <Property label="Category">{task.category || 'General'}</Property>
-            <Property label="Proof">{task.proof_required ? 'Requested' : 'Optional'}{proofs.length ? ` · ${proofs.length} screenshot${proofs.length === 1 ? '' : 's'}` : ''}</Property>
+            <Property label="Proof">{task.proof_required ? 'Mandatory' : 'Optional'}{proofs.length ? ` · ${proofs.length} screenshot${proofs.length === 1 ? '' : 's'}` : ''}</Property>
             <Property label="Updated"><span suppressHydrationWarning>{relativeTime(task.updated_at || task.created_at)}</span></Property>
           </PropertyList>
         </Surface>
         <Surface>
-          <ProofPanel proofs={proofs} onAdd={() => setProofMode('attach')} hint={task.proof_required ? 'The assigner asked for proof. Add a screenshot showing the work is done.' : undefined} />
+          <ProofPanel proofs={proofs} onAdd={() => setProofMode('attach')} hint={task.proof_required ? 'Proof is mandatory. Add a screenshot before completing this task.' : undefined} />
         </Surface>
         <Surface>
           <form className="grid gap-2 p-3" onSubmit={saveCompletionNotes}>
@@ -153,6 +153,6 @@ export default function TaskDetailView({ id, initialData }) {
         </Surface>
       </aside>
     </div>
-    <ProofDialog target={proofMode ? { kind: 'task', id: task.id, title: task.title } : null} mode={proofMode || 'complete'} onClose={() => setProofMode(null)} onDone={proofSaved} />
+    <ProofDialog target={proofMode ? { kind: 'task', id: task.id, title: task.title } : null} mode={proofMode || 'complete'} required={Boolean(task.proof_required) && !taskHasProof(updates)} onClose={() => setProofMode(null)} onDone={proofSaved} />
   </div>;
 }

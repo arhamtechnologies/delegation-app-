@@ -58,8 +58,9 @@ function imageFrom(items) {
 
 // Pick, paste (Ctrl/⌘+V) or drop a screenshot; it is shrunk to WebP and uploaded.
 // target: { kind: 'task' | 'checklist', id, title }.
-// mode 'complete': marks the item done, with or without a screenshot. mode 'attach': only uploads.
-export function ProofDialog({ target, mode = 'complete', onClose, onDone }) {
+// mode 'complete': marks the item done, with or without a screenshot (only with one when `required`).
+// mode 'attach': only uploads.
+export function ProofDialog({ target, mode = 'complete', required = false, onClose, onDone }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [step, setStep] = useState('');
@@ -67,8 +68,8 @@ export function ProofDialog({ target, mode = 'complete', onClose, onDone }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
   const savedProof = useRef(null); // set once the upload succeeds, so a retry only re-runs completion
-  const shown = useRef({ target, mode }); // keeps the text steady while the dialog animates closed
-  if (target) shown.current = { target, mode };
+  const shown = useRef({ target, mode, required }); // keeps the text steady while the dialog animates closed
+  if (target) shown.current = { target, mode, required };
   const open = Boolean(target);
   const busy = Boolean(step);
 
@@ -136,8 +137,10 @@ export function ProofDialog({ target, mode = 'complete', onClose, onDone }) {
   }
 
   const completing = shown.current.mode === 'complete';
+  const mustAdd = completing && shown.current.required;
   const title = shown.current.target?.title;
-  return <Modal open={open} title={completing ? 'Complete with proof' : 'Add proof screenshot'} description={completing ? `Add a screenshot showing “${title}” is done. It is optional.` : `Attach a screenshot to “${title}”.`} onClose={() => { if (!busy) onClose(); }}>
+  const description = !completing ? `Attach a screenshot to “${title}”.` : mustAdd ? `Proof is mandatory for “${title}”. Add a screenshot showing the work is done.` : `Add a screenshot showing “${title}” is done. It is optional.`;
+  return <Modal open={open} title={mustAdd ? 'Proof needed to complete' : completing ? 'Complete with proof' : 'Add proof screenshot'} description={description} onClose={() => { if (!busy) onClose(); }}>
     <div className="grid gap-3">
       <input ref={inputRef} type="file" accept="image/*" className="sr-only" tabIndex={-1} onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ''; }} />
       <button
@@ -159,7 +162,7 @@ export function ProofDialog({ target, mode = 'complete', onClose, onDone }) {
       {error && <div className="form-error" role="alert"><Icon name="warning" size={16} />{error}</div>}
       <div className="modal-actions flex-wrap">
         <button className="button button-ghost" type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        {completing && !file && <Button type="button" variant="outline" disabled={busy} onClick={() => submit({ withScreenshot: false })}>Complete without screenshot</Button>}
+        {completing && !mustAdd && !file && <Button type="button" variant="outline" disabled={busy} onClick={() => submit({ withScreenshot: false })}>Complete without screenshot</Button>}
         <Button type="button" disabled={!file || busy} onClick={() => submit({ withScreenshot: true })}>{busy ? <><Spinner />{step}</> : completing ? <><Icon name="check" size={15} />Upload & complete</> : <><Icon name="upload" size={15} />Upload</>}</Button>
       </div>
     </div>
