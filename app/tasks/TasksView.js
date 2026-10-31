@@ -18,6 +18,8 @@ import { getWorkItemStatus } from '../../lib/work-data';
 import { getPageCount } from '../../lib/work-list.mjs';
 import { isFreshRender, isValidDateFilter, loadTasksPage, loadTasksWorkspace, parseTaskFilters, SECTION_PAGE_SIZE, taskSectionStatuses } from '../../lib/page-data';
 import { Spinner } from '../../components/Loader';
+import { ProofDialog } from '../../components/TaskProof';
+import { isProofRequiredError } from '../../lib/task-proofs';
 
 const emptyForm = { title: '', description: '', assignee_id: '', eta: '', due_time: '', start_date: '', priority: 'normal', category: 'General', instructions: '', proof_required: true, completion_notes: null, attachments: [] };
 const viewTabs = [['all', 'All work'], ['task', 'Tasks'], ['checklist', 'Checklist']];
@@ -54,6 +56,7 @@ export default function TasksView({ initialData }) {
   const [workspaceReload, setWorkspaceReload] = useState(0);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(null);
+  const [proofTask, setProofTask] = useState(null);
   const [deletingTaskId, setDeletingTaskId] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -208,9 +211,18 @@ export default function TasksView({ initialData }) {
     setError('');
     patchWorkItems((items) => items.map((item) => (item.kind === workItem.kind && item.id === workItem.id ? markWorkItemCompleted(item) : item)));
     const { error: updateError } = await (workItem.kind === 'checklist' ? setChecklistCompletion(workItem.id) : setTaskCompletion(workItem.id, true));
-    if (updateError) { patchWorkItems((items) => items.map((item) => (item.kind === workItem.kind && item.id === workItem.id ? workItem : item))); setError(updateError.message); }
-    else load({ background: true });
+    if (updateError) {
+      patchWorkItems((items) => items.map((item) => (item.kind === workItem.kind && item.id === workItem.id ? workItem : item)));
+      if (workItem.kind === 'task' && isProofRequiredError(updateError)) setProofTask(workItem);
+      else setError(updateError.message);
+    } else load({ background: true });
     setCompleting(null);
+  }
+
+  function proofCompleted() {
+    setProofTask(null);
+    setMessage('Proof uploaded and task completed.');
+    load({ background: true });
   }
 
   async function deleteTask(workItem) {
@@ -298,5 +310,6 @@ export default function TasksView({ initialData }) {
         </>}
     </Surface>
     {taskData && <Modal open={modalOpen} title={personal ? 'Add my task' : 'Create a task'} description={personal ? 'Plan your own work for the day. It shows up in your list and on your dashboard.' : 'Give one person a clear next step with enough context to finish well.'} onClose={() => setModalOpen(false)} wide><form className="modal-form" onSubmit={submit}><div className="form-grid form-grid-two"><div className="field field-wide"><label htmlFor="task-title">Task title<span>*</span></label><input id="task-title" className="input" required placeholder="e.g. Prepare weekly sales summary" value={form.title} onChange={(event) => updateForm('title', event.target.value)} /></div>{!personal && <div className="field"><label htmlFor="task-assignee">Assign to<span>*</span></label><select id="task-assignee" className="input" required value={form.assignee_id} onChange={(event) => updateForm('assignee_id', event.target.value)}><option value="">Choose a person</option>{(taskData?.role && employees.filter((employee) => employee.role !== 'super_admin' && employee.role !== 'assigner' && employee.role !== 'ea')).map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div>}<div className="field"><label htmlFor="task-priority">Priority</label><select id="task-priority" className="input" value={form.priority} onChange={(event) => updateForm('priority', event.target.value)}><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></div><div className="field"><label htmlFor="task-due">Due date<span>*</span></label><input id="task-due" className="input" type="date" required value={form.eta} onChange={(event) => updateForm('eta', event.target.value)} /></div><div className="field"><label htmlFor="task-due-time">Due time<span>*</span></label><input id="task-due-time" className="input" type="time" required value={form.due_time} onChange={(event) => updateForm('due_time', event.target.value)} /></div><div className="field"><label htmlFor="task-start">Start date</label><input id="task-start" className="input" type="date" value={form.start_date} onChange={(event) => updateForm('start_date', event.target.value)} /></div><div className="field field-wide"><label htmlFor="task-description">Description</label><textarea id="task-description" className="input" rows="4" placeholder="What does done look like?" value={form.description} onChange={(event) => updateForm('description', event.target.value)} /></div>{!personal && <><div className="field field-wide"><label htmlFor="task-instructions">Instructions or handoff notes</label><textarea id="task-instructions" className="input" rows="3" placeholder="Add links, context, or specific expectations." value={form.instructions} onChange={(event) => updateForm('instructions', event.target.value)} /></div><label className="checkbox-field field-wide"><input type="checkbox" checked={form.proof_required} onChange={(event) => updateForm('proof_required', event.target.checked)} /><span><strong>Ask for completion proof</strong><small>Keep the handoff auditable when the task is submitted.</small></span></label></>}</div>{error && <div className="form-error"><Icon name="warning" size={16} />{error}</div>}<div className="modal-actions"><button className="button button-ghost" type="button" onClick={() => setModalOpen(false)}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}>{saving ? <><Spinner />Creating...</> : 'Create task'}{!saving && <Icon name="arrowUpRight" size={16} />}</button></div></form></Modal>}
+    <ProofDialog task={proofTask} onClose={() => setProofTask(null)} onDone={proofCompleted} />
   </AppShell>;
 }

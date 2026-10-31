@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Spinner } from './Loader';
+import { ProofThumb } from './TaskProof';
 
 // Linear-style activity: a quiet timeline and a composer that posts with ⌘/Ctrl+Enter.
 export function ActivityFeed({ createdAt, createdLabel = 'Created', updates, onPost, disabled, label = 'Update' }) {
@@ -30,9 +31,9 @@ export function ActivityFeed({ createdAt, createdLabel = 'Created', updates, onP
       {updates.map((update) => <li key={update.id} className={cn('relative flex gap-3', update.pending && 'opacity-60')}>
         <span className="relative z-[1] mt-1 size-[15px] shrink-0 rounded-full border-2 border-background bg-brand ring-1 ring-brand/20" />
         <div className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2.5">
-          <div className="flex items-baseline justify-between gap-3 text-[13.5px] text-muted-foreground"><span className="font-medium text-foreground">{update.update_type === 'remark' ? label : 'Status change'}</span><span className="shrink-0">{update.pending ? <span className="inline-flex items-center gap-1.5"><Spinner size={12} />Posting…</span> : formatDateTime(update.created_at)}</span></div>
+          <div className="flex items-baseline justify-between gap-3 text-[13.5px] text-muted-foreground"><span className="font-medium text-foreground">{update.update_type === 'remark' ? label : update.update_type === 'proof' ? 'Proof' : 'Status change'}</span><span className="shrink-0">{update.pending ? <span className="inline-flex items-center gap-1.5"><Spinner size={12} />Posting…</span> : formatDateTime(update.created_at)}</span></div>
           <p className="mt-1 text-[15px] leading-relaxed whitespace-pre-line text-foreground/90">{update.remark || `${update.update_type} recorded.`}</p>
-          {update.proof_url && <a className="mt-1.5 inline-block text-[14px] font-medium text-brand hover:underline" href={update.proof_url} target="_blank" rel="noreferrer">Open supporting file</a>}
+          {update.update_type === 'proof' ? <ProofThumb path={update.proof_url} className="mt-2" /> : update.proof_url && <a className="mt-1.5 inline-block text-[14px] font-medium text-brand hover:underline" href={update.proof_url} target="_blank" rel="noreferrer">Open supporting file</a>}
         </div>
       </li>)}
       {!createdAt && !updates.length && <li className="text-[14px] text-muted-foreground">No updates yet.</li>}

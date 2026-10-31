@@ -14,3 +14,4 @@ import './whatsapp-prompt.test.mjs';
 import './whatsapp-alerts.test.mjs';
 import './whatsapp-daily-report.test.mjs';
 import './credential-email.test.mjs';
+import './task-proofs.test.mjs';

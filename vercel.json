@@ -6,6 +6,10 @@
     {
       "path": "/api/checklist/generate",
       "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/tasks/proofs/cleanup",
+      "schedule": "0 21 * * *"
     }
   ]
 }
