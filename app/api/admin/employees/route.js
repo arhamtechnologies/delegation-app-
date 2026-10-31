@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createSupabaseAdminClient, createSupabaseUserClient, getBearerToken } from '../../../../lib/supabase-server';
+import { buildCredentialEmail, sendCredentialEmail, siteOrigin } from '../../../../lib/server/credential-email.mjs';
 
 const managerRoles = new Set(['super_admin', 'assigner', 'ea']);
 const employeeRoles = new Set(['super_admin', 'assigner', 'ea', 'doer']);
@@ -30,37 +31,6 @@ function validatePayload(payload) {
   return { value: { name, email, mobile: mobile || null, role, active: payload.active } };
 }
 
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-}
-
-async function sendEmployeeSetupEmail({ email, name, setupUrl }) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!apiKey || !from) return { error: 'Email invitations are not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL on the server.' };
-
-  const safeName = escapeHtml(name);
-  const safeSetupUrl = escapeHtml(setupUrl);
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: [email],
-      subject: 'Set up your Delegation workspace account',
-      html: `<p>Hi ${safeName},</p><p>Your administrator added you to the Delegation workspace. Use the link below to set your password and sign in.</p><p><a href="${safeSetupUrl}">Set your password</a></p><p>If you were not expecting this invitation, you can ignore this email.</p>`,
-      text: `Hi ${name},\n\nYour administrator added you to the Delegation workspace. Set your password and sign in using this link:\n${setupUrl}\n\nIf you were not expecting this invitation, you can ignore this email.`,
-    }),
-  });
-
-  if (!response.ok) {
-    const details = await response.json().catch(() => ({}));
-    console.error('Resend could not deliver an employee setup email.', { status: response.status, name: details?.name, message: details?.message });
-    const reason = typeof details?.message === 'string' && details.message.length <= 300 ? ` Resend: ${details.message}` : '';
-    return { error: `The invitation email could not be sent.${reason} Check the Resend sender configuration and try again.` };
-  }
-  return { success: true };
-}
 
 export async function POST(request) {
   const accessToken = getBearerToken(request);
@@ -148,11 +118,11 @@ export async function POST(request) {
     return errorResponse('The employee record could not be created. No login account was left behind.', 500);
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+  const appUrl = siteOrigin(request);
   const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
     type: 'recovery',
     email: validation.value.email,
-    options: { redirectTo: new URL('/update-password', siteUrl).toString() },
+    options: { redirectTo: `${appUrl}/update-password` },
   });
   if (linkError || !linkData?.properties?.action_link) {
     const { error: employeeCleanupError } = await adminClient.from('employees').delete().eq('id', employee.id);
@@ -163,7 +133,8 @@ export async function POST(request) {
 
   let emailResult;
   try {
-    emailResult = await sendEmployeeSetupEmail({ email: validation.value.email, name: validation.value.name, setupUrl: linkData.properties.action_link });
+    const message = buildCredentialEmail({ name: validation.value.name, email: validation.value.email, appUrl, setupUrl: linkData.properties.action_link, isNew: true });
+    emailResult = await sendCredentialEmail({ to: validation.value.email, ...message });
   } catch (error) {
     console.error('Employee setup email request failed.', { message: error.message });
     emailResult = { error: 'The invitation email could not be sent. Check the Resend configuration and try again.' };
