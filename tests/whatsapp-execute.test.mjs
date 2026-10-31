@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { executeProposals } from '../lib/wa/execute-core.mjs';
 
-const actor = { id: 'dir', name: 'Director', role: 'ea', auth_user_id: 'auth-dir' };
+const actor = { id: 'dir', name: 'Director', role: 'ea', auth_user_id: 'auth-dir', chatId: '919800000000@c.us' };
 
 // Minimal chainable stand-in for the Supabase admin client: every query resolves to `result`.
 function stubAdmin(result = { data: null, error: null }) {
@@ -28,7 +28,7 @@ test('wa execute 2: a successful delete calls the app rule with the actor and re
   let received;
   const rules = { deleteTask: async (_admin, ruleActor, payload) => { received = { ruleActor, payload }; return { ok: true, body: { success: true } }; } };
   const lines = await executeProposals(admin, actor, [{ kind: 'task_delete', taskId: 't1', shortCode: 12, label: 'PERMANENT DELETE #12 "A" (cannot be undone)' }], rules);
-  assert.deepEqual(received, { ruleActor: { employeeId: 'dir', role: 'ea', authUserId: 'auth-dir', name: 'Director' }, payload: { id: 't1' } });
+  assert.deepEqual(received, { ruleActor: { employeeId: 'dir', role: 'ea', authUserId: 'auth-dir', name: 'Director', chatId: '919800000000@c.us' }, payload: { id: 't1' } });
   assert.deepEqual(lines, ['✅ PERMANENT DELETE #12 "A" (cannot be undone)']);
 });
 
