@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildAlertMessages, dueSummaryDate, planTaskAlerts, reminderStage } from '../lib/wa/alerts.mjs';
+import { buildAlertMessages, dueSummaryDate, planChecklistAlerts, planTaskAlerts, reminderStage } from '../lib/wa/alerts.mjs';
 
 const eta = '2026-10-29T12:00:00.000Z'; // 5:30 PM India time
 const at = (minutesFromEta) => new Date(Date.parse(eta) + minutesFromEta * 60000);
 const anekant = { name: 'Anekant Jain', chatId: '919575000000@c.us' };
 const ea = '919800000000@c.us';
-const task = (overrides = {}) => ({ id: 't1', title: 'GST report', eta, created_at: at(-120).toISOString(), assigneeName: 'Varun', director: anekant, ...overrides });
+const task = (overrides = {}) => ({ id: 't1', title: 'GST report', description: 'File the October GST returns', eta, created_at: at(-120).toISOString(), assigneeName: 'Varun', director: anekant, ...overrides });
 
 test('wa alerts 1: reminder windows are 5 min before, 5 min after and 15 min after the ETA', () => {
   assert.equal(reminderStage(eta, at(-6)), null);
@@ -32,23 +32,42 @@ test('wa alerts 2: only a fresh director task gets an assignment notice; the ETA
   assert.equal(reminder.anchor, eta);
 });
 
-test('wa alerts 3: the EA hears about every stage; the director only at 15 minutes', () => {
+test('wa alerts 3: the EA hears about every stage with person, task, description and due time; the director only at 15 minutes', () => {
   const alerts = [
     { ...task(), taskId: 't1', stage: 'assigned', anchor: eta },
-    { ...task({ assigneeName: 'Vipul', title: 'Stock count' }), taskId: 't2', stage: 'due_soon', anchor: eta },
+    { ...task({ assigneeName: 'Vipul', title: 'Stock count', description: null }), taskId: 't2', stage: 'due_soon', anchor: eta },
     { ...task({ assigneeName: 'Tanisha', title: 'Bank visit', director: null }), taskId: 't3', stage: 'overdue', anchor: eta },
   ];
   const messages = buildAlertMessages(alerts, [ea]);
   assert.equal(messages.length, 1);
   assert.equal(messages[0].chatId, ea);
-  assert.match(messages[0].text, /📌 Anekant Jain assigned a task\n• Varun: GST report \(ETA Oct 29 · 5:30 PM\)/);
-  assert.match(messages[0].text, /⏰ Due in 5 minutes.*\n• Vipul: Stock count/);
-  assert.match(messages[0].text, /⚠️ Overdue.*\n• Tanisha: Bank visit/);
+  assert.match(messages[0].text, /📌 Anekant Jain assigned a task\n\nPerson: Varun\nTask: GST report\nDescription: File the October GST returns\nDue: Oct 29 · 5:30 PM/);
+  assert.match(messages[0].text, /⏰ Due in 5 minutes.*\n\nPerson: Vipul\nTask: Stock count\nDue: Oct 29 · 5:30 PM/, 'no empty description line');
+  assert.match(messages[0].text, /⚠️ Overdue.*\n\nPerson: Tanisha\nTask: Bank visit/);
   assert.doesNotMatch(messages[0].text, /#\d|t1|t2/, 'no internal ids');
 
   const escalated = buildAlertMessages([{ ...task(), taskId: 't1', stage: 'escalated', anchor: eta }], [ea]);
   assert.deepEqual(escalated.map((message) => message.chatId), [ea, anekant.chatId]);
-  assert.ok(escalated.every((message) => /🚨 Still not done 15 minutes after the ETA\n• Varun: GST report \(ETA Oct 29 · 5:30 PM\) · by Anekant Jain/.test(message.text)));
+  assert.ok(escalated.every((message) => /🚨 Still not done 15 minutes after the ETA\n\nPerson: Varun\nTask: GST report\nDescription: File the October GST returns\nDue: Oct 29 · 5:30 PM\nAssigned by: Anekant Jain/.test(message.text)));
+});
+
+test('wa alerts 3b: long descriptions are clipped and big batches point to the app', () => {
+  const [message] = buildAlertMessages([{ ...task({ description: 'x'.repeat(400) }), taskId: 't1', stage: 'overdue', anchor: eta }], [ea]);
+  assert.match(message.text, /Description: x{299}…\n/);
+  const many = Array.from({ length: 12 }, (_, index) => ({ ...task({ title: `Task ${index}` }), taskId: `t${index}`, stage: 'assigned', anchor: eta }));
+  const [batch] = buildAlertMessages(many, [ea]);
+  assert.match(batch.text, /^📌 Anekant Jain assigned 12 tasks/);
+  assert.equal(batch.text.match(/Person: /g).length, 10);
+  assert.match(batch.text, /\+2 more in the app$/);
+});
+
+test('wa alerts 3c: a recurring checklist task a director adds is copied to the EA only', () => {
+  const template = { id: 'r1', task: 'Daily cash report', frequency: 'daily', due_time: '18:30:00', created_at: at(-10).toISOString(), assigneeName: 'Varun', director: anekant };
+  const planned = planChecklistAlerts([template, { ...template, id: 'r2', director: null }, { ...template, id: 'r3', created_at: at(-31).toISOString() }], at(0));
+  assert.deepEqual(planned.map((alert) => alert.templateId), ['r1'], 'not EA-made, not older than 30 minutes');
+  const messages = buildAlertMessages(planned, [ea]);
+  assert.deepEqual(messages.map((message) => message.chatId), [ea]);
+  assert.equal(messages[0].text, '📋 Anekant Jain added a checklist task\n\nPerson: Varun\nTask: Daily cash report\nRepeats: daily at 6:30 PM');
 });
 
 test('wa alerts 4: no EA number and no director means nothing to send', () => {
@@ -84,4 +103,14 @@ test('wa alerts 7: a task missing details gets a fixed question naming only what
     'To create this task, please send:\n• ETA time (e.g. 5:30 PM)',
   );
   assert.match(missingTaskQuestion(['assignee']), /Whom to assign/);
+});
+
+test('wa alerts 8: a checklist task missing details gets a fixed question, including the time', async () => {
+  const { missingChecklistQuestion, missingFields } = await import('../lib/wa/tools.mjs');
+  assert.equal(missingChecklistQuestion([]), null);
+  assert.equal(
+    missingChecklistQuestion(missingFields('checklist', { action: 'template_create', assignee: 'Varun', task: 'Cash report', frequency: 'daily' }), 'Cash report'),
+    'To add "Cash report", please send:\n• Time (e.g. 6:30 PM)',
+  );
+  assert.match(missingChecklistQuestion(missingFields('checklist', { action: 'template_create' })), /Whom to assign\n• Checklist task.*\n• How often.*\n• Time/);
 });
