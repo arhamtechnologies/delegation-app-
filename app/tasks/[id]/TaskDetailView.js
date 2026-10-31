@@ -15,6 +15,8 @@ import { getAuthenticatedUser } from '../../../lib/auth';
 import { isFreshRender, loadTaskDetail } from '../../../lib/page-data';
 import { formatTaskDeadline, getTaskStatus, setTaskCompletion } from '../../../lib/task-data';
 import { supabaseBrowser } from '../../../lib/supabase-browser';
+import { isProofRequiredError, isProofUpdate, taskHasProof } from '../../../lib/task-proofs';
+import { ProofDialog, ProofThumb } from '../../../components/TaskProof';
 
 const statusLabels = { pending: 'Pending', overdue: 'Overdue', completed: 'Completed' };
 const priorityLabels = { normal: 'Normal', high: 'High', critical: 'Critical' };
@@ -37,6 +39,7 @@ export default function TaskDetailView({ id, initialData }) {
   const [loading, setLoading] = useState(!initialData);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [proofMode, setProofMode] = useState(null);
 
   const load = useCallback(async ({ background = false } = {}) => {
     if (!id) return;
@@ -60,13 +63,21 @@ export default function TaskDetailView({ id, initialData }) {
   async function toggleCompletion() {
     const previous = task;
     const completing = getTaskStatus(task) !== 'completed';
+    if (completing && task.proof_required && !taskHasProof(updates)) { setProofMode('complete'); return; }
     setSaving(true);
     setError('');
     setTask((current) => ({ ...current, completed_at: completing ? new Date().toISOString() : null, status: completing ? 'closed' : 'pending' }));
     const { error: updateError } = await setTaskCompletion(id, completing);
-    if (updateError) { setTask(previous); setError(updateError.message); }
+    if (updateError) { setTask(previous); if (isProofRequiredError(updateError)) setProofMode('complete'); else setError(updateError.message); }
     else load({ background: true });
     setSaving(false);
+  }
+
+  function proofSaved({ update }) {
+    if (update) setUpdates((current) => [...current, update]);
+    if (proofMode === 'complete') setTask((current) => ({ ...current, completed_at: new Date().toISOString(), status: 'closed' }));
+    setProofMode(null);
+    load({ background: true });
   }
 
   async function addRemark(text) {
@@ -100,6 +111,7 @@ export default function TaskDetailView({ id, initialData }) {
 
   const taskStatus = getTaskStatus(task);
   const completed = taskStatus === 'completed';
+  const proofs = updates.filter((update) => isProofUpdate(update) && !update.pending);
   return <div className={pageContainerClass}>
     <div className="mb-4 flex items-center justify-between gap-3">
       {back}
@@ -125,9 +137,17 @@ export default function TaskDetailView({ id, initialData }) {
             <Property label="Due"><span className={cn(taskStatus === 'overdue' && 'font-medium text-destructive')}>{formatTaskDeadline(task, { includeYear: true })}</span></Property>
             <Property label="Start">{formatDate(task.start_date)}</Property>
             <Property label="Category">{task.category || 'General'}</Property>
-            <Property label="Proof">{task.proof_required ? 'Required' : 'Optional'}</Property>
+            <Property label="Proof">{task.proof_required ? 'Required' : 'Optional'}{proofs.length ? ` · ${proofs.length} screenshot${proofs.length === 1 ? '' : 's'}` : ''}</Property>
             <Property label="Updated"><span suppressHydrationWarning>{relativeTime(task.updated_at || task.created_at)}</span></Property>
           </PropertyList>
+        </Surface>
+        <Surface>
+          <div className="grid gap-2 p-3">
+            <div className="flex items-center justify-between gap-2"><h2 className="text-[14px] font-semibold text-foreground">Proof screenshots</h2><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setProofMode('attach')}><Icon name="upload" size={14} />Add</Button></div>
+            {proofs.length
+              ? <div className="flex flex-wrap gap-2">{proofs.map((proof) => <ProofThumb key={proof.id} path={proof.proof_url} />)}</div>
+              : <p className="text-[13.5px] text-muted-foreground">{task.proof_required ? 'A screenshot is needed before this task can be completed.' : 'No screenshots yet.'}</p>}
+          </div>
         </Surface>
         <Surface>
           <form className="grid gap-2 p-3" onSubmit={saveCompletionNotes}>
@@ -138,5 +158,6 @@ export default function TaskDetailView({ id, initialData }) {
         </Surface>
       </aside>
     </div>
+    <ProofDialog task={proofMode ? task : null} mode={proofMode || 'complete'} onClose={() => setProofMode(null)} onDone={proofSaved} />
   </div>;
 }

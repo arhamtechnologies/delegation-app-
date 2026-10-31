@@ -40,6 +40,7 @@ export default function EmployeesView({ initialData }) {
   const [resetConfirmation, setResetConfirmation] = useState('');
   const [resetSaving, setResetSaving] = useState(false);
   const [resetError, setResetError] = useState('');
+  const [sendingCredentials, setSendingCredentials] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -226,9 +227,50 @@ export default function EmployeesView({ initialData }) {
     setDeletingEmployeeId(null);
   }
 
-  const canDeleteEmployees = ['super_admin', 'assigner', 'ea'].includes(currentRole);
+  async function sendCredentials(target) {
+    const recipients = target ? [target] : rows.filter((employee) => employee.active && hasLoginAccess(employee) && employee.email);
+    if (!recipients.length) {
+      setError('No active people with a login to email.');
+      return;
+    }
+    const prompt = target
+      ? `Email login details to ${target.name} (${target.email})?\n\nThey get their username, the app link, and a link to set a new password. Their current password keeps working until they change it.`
+      : `Email login details to all ${recipients.length} active people with a login?\n\nEach person gets their username, the app link, and a link to set a new password. Current passwords keep working until changed.`;
+    if (!window.confirm(prompt)) return;
 
-  return <AppShell title="People" description="Your workspace roster, roles, and login access." actions={<Button size="sm" className="h-8 gap-1.5" onClick={openCreate}><Icon name="plus" size={15} />Add employee</Button>}>
+    setSendingCredentials(target ? target.id : 'all');
+    setError('');
+    setMessage('');
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        setError('Your session has expired. Please sign in again.');
+        return;
+      }
+      const response = await fetch('/api/admin/employees/send-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify(target ? { employee_ids: [target.id] } : { all: true }),
+      });
+      const result = await response.json().catch(() => ({}));
+      const skippedNote = result.skipped?.length ? ` Skipped: ${result.skipped.map((entry) => `${entry.name} (${entry.reason})`).join(', ')}.` : '';
+      if (!response.ok) {
+        const sentNote = result.sent ? ` ${result.sent} email${result.sent === 1 ? ' was' : 's were'} sent before the failure.` : '';
+        setError(`${result.error || 'Login details could not be sent.'}${sentNote}${skippedNote}`);
+      } else {
+        setMessage(`${target ? `Login details sent to ${target.name}.` : `Login details sent to ${result.sent} ${result.sent === 1 ? 'person' : 'people'}.`}${skippedNote}`);
+      }
+    } catch {
+      setError('The email service is unavailable. Please try again.');
+    } finally {
+      setSendingCredentials(null);
+    }
+  }
+
+  const canDeleteEmployees = ['super_admin', 'assigner', 'ea'].includes(currentRole);
+  const canSendCredentials = canDeleteEmployees;
+
+  return <AppShell title="People" description="Your workspace roster, roles, and login access." actions={<>{canSendCredentials && <Button size="sm" variant="outline" className="h-8 gap-1.5" disabled={sendingCredentials !== null} onClick={() => sendCredentials(null)}>{sendingCredentials === 'all' ? <><Spinner />Sending…</> : <><Icon name="mail" size={15} />Email login details</>}</Button>}<Button size="sm" className="h-8 gap-1.5" onClick={openCreate}><Icon name="plus" size={15} />Add employee</Button></>}>
     <StatStrip items={[
       { label: 'People', value: rows.length, icon: 'users' },
       { label: 'Active', value: rows.filter((employee) => employee.active).length, status: 'completed', hint: 'Can receive tasks' },
@@ -255,6 +297,7 @@ export default function EmployeesView({ initialData }) {
             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" className="size-8 justify-self-end text-muted-foreground max-md:col-start-2 max-md:row-start-1" aria-label={`Actions for ${employee.name}`}><Icon name="more" size={16} /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem onSelect={() => openEdit(employee)}><Icon name="edit" size={15} />Edit details</DropdownMenuItem>
+              {canSendCredentials && employee.active && hasLoginAccess(employee) && <DropdownMenuItem disabled={sendingCredentials !== null} onSelect={() => sendCredentials(employee)}><Icon name="mail" size={15} />Send login email</DropdownMenuItem>}
               {currentRole === 'super_admin' && hasLoginAccess(employee) && <DropdownMenuItem onSelect={() => openReset(employee)}><Icon name="lock" size={15} />Reset password</DropdownMenuItem>}
               <DropdownMenuItem onSelect={() => toggleActive(employee)}><Icon name={employee.active ? 'close' : 'check'} size={15} />{employee.active ? 'Deactivate' : 'Activate'}</DropdownMenuItem>
               {canDeleteEmployees && employee.id !== currentEmployeeId && <><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" disabled={deletingEmployeeId === employee.id} onSelect={() => deleteEmployee(employee)}><Icon name="close" size={15} />{deletingEmployeeId === employee.id ? <><Spinner />Deleting…</> : 'Delete'}</DropdownMenuItem></>}
