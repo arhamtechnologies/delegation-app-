@@ -13,7 +13,7 @@ import { peekQuery, queryKey, setQuery } from '../../lib/query-cache';
 import { isFreshRender, loadDashboardData } from '../../lib/page-data';
 import { canCompleteTask, setTaskCompletion } from '../../lib/task-data';
 import { getWorkItemStatus, sortWorkItemsChronologically } from '../../lib/work-data';
-import { ProofDialog } from '../../components/TaskProof';
+import { ProofDialog, ProofPrompt } from '../../components/TaskProof';
 import { isProofRequiredError } from '../../lib/task-proofs';
 
 const DASHBOARD_PAGE = 20;
@@ -34,7 +34,9 @@ export default function DashboardView({ initialData }) {
   const [typeFilter, setTypeFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [completing, setCompleting] = useState(null);
-  const [proofTask, setProofTask] = useState(null);
+  const [justCompleted, setJustCompleted] = useState(null);
+  const [proofTarget, setProofTarget] = useState(null);
+  const [requiredProof, setRequiredProof] = useState(null);
   const [visibleCount, setVisibleCount] = useState({ overdue: DASHBOARD_PAGE, pending: DASHBOARD_PAGE, completed: DASHBOARD_PAGE });
   const abortRef = useRef(null);
 
@@ -91,11 +93,8 @@ export default function DashboardView({ initialData }) {
     mapGroups(markWorkItemCompleted);
     const { error: updateError } = await (workItem.kind === 'checklist' ? setChecklistCompletion(workItem.id) : setTaskCompletion(workItem.id, true));
     // Revert just this row so a refresh that landed meanwhile is not thrown away.
-    if (updateError) {
-      mapGroups(() => workItem);
-      if (workItem.kind === 'task' && isProofRequiredError(updateError)) setProofTask(workItem);
-      else setError(updateError.message);
-    }
+    if (updateError) { mapGroups(() => workItem); if (workItem.kind === 'task' && isProofRequiredError(updateError)) { setJustCompleted(null); setRequiredProof({ kind: 'task', id: workItem.id, title: workItem.title }); } else setError(updateError.message); }
+    else setJustCompleted({ kind: workItem.kind, id: workItem.id, title: workItem.title });
     setCompleting(null);
     if (!updateError) load();
   }
@@ -112,6 +111,7 @@ export default function DashboardView({ initialData }) {
       { label: 'Overdue', value: data ? metrics.overdue : null, status: 'overdue', tone: 'danger', href: '/tasks?status=overdue' },
       { label: 'Completed', value: data ? metrics.completed : null, status: 'completed', href: '/tasks?status=completed' },
     ]} />
+    <ProofPrompt target={justCompleted} onAdd={() => setProofTarget(justCompleted)} onDismiss={() => setJustCompleted(null)} />
     <Surface>
       <SurfaceHeader title="Today" description="Everything due today, grouped by status." actions={<>
         <Button asChild variant="outline" size="sm" className="h-8"><Link href="/follow-up-tasks"><Icon name="calendar" size={14} />Follow-ups</Link></Button>
@@ -130,6 +130,7 @@ export default function DashboardView({ initialData }) {
         {data && !groups.overdue.length && !groups.pending.length && !groups.completed.length && <ListEmpty title={filtersActive ? 'Nothing matches these filters' : 'Nothing scheduled for today'} description={filtersActive ? 'Try a different search or clear the filters.' : 'Work due today will show up here.'} action={filtersActive ? <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button> : null} />}
       </>}
     </Surface>
-    <ProofDialog task={proofTask} onClose={() => setProofTask(null)} onDone={() => { setProofTask(null); load(); }} />
+    <ProofDialog target={proofTarget} mode="attach" onClose={() => setProofTarget(null)} onDone={() => { setProofTarget(null); setJustCompleted(null); }} />
+    <ProofDialog target={requiredProof} mode="complete" required onClose={() => setRequiredProof(null)} onDone={() => { setRequiredProof(null); load(); }} />
   </AppShell>;
 }

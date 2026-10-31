@@ -96,10 +96,10 @@ test('wa alerts 7: a task missing details gets a fixed question naming only what
   assert.equal(missingTaskQuestion([]), null);
   assert.equal(
     missingTaskQuestion(missingFields('task_change', { action: 'create', assignee: 'Varun' })),
-    'To create this task, please send:\n• Task title\n• Task description\n• ETA (date and time, e.g. 30 Oct 5:30 PM)',
+    'To create this task, please send:\n• Task title\n• Task description\n• ETA (date and time, e.g. 30 Oct 5:30 PM)\n• Proof: mandatory or optional (must a screenshot be added before it can be completed?)',
   );
   assert.equal(
-    missingTaskQuestion(missingFields('task_change', { action: 'create', assignee: 'Varun', title: 'GST', description: 'File returns', due_date: '2026-10-30' })),
+    missingTaskQuestion(missingFields('task_change', { action: 'create', assignee: 'Varun', title: 'GST', description: 'File returns', due_date: '2026-10-30', proof_required: true })),
     'To create this task, please send:\n• ETA time (e.g. 5:30 PM)',
   );
   assert.match(missingTaskQuestion(['assignee']), /Whom to assign/);
@@ -113,4 +113,12 @@ test('wa alerts 8: a checklist task missing details gets a fixed question, inclu
     'To add "Cash report", please send:\n• Time (e.g. 6:30 PM)',
   );
   assert.match(missingChecklistQuestion(missingFields('checklist', { action: 'template_create' })), /Whom to assign\n• Checklist task.*\n• How often.*\n• Time/);
+});
+
+test('wa alerts 9: a new task always asks whether proof is mandatory or optional, last', async () => {
+  const { missingFields, missingTaskQuestion } = await import('../lib/wa/tools.mjs');
+  const complete = { action: 'create', assignee: 'Varun', title: 'GST', description: 'File returns', due_date: '2026-10-30', due_time: '17:00' };
+  assert.equal(missingTaskQuestion(missingFields('task_change', complete)), 'To create this task, please send:\n• Proof: mandatory or optional (must a screenshot be added before it can be completed?)');
+  assert.deepEqual(missingFields('task_change', { ...complete, proof_required: true }), []);
+  assert.match(missingTaskQuestion(missingFields('task_change', { action: 'create', assignee: 'Varun' })), /ETA \(date and time.*\)\n• Proof: mandatory or optional/);
 });

@@ -44,9 +44,9 @@ test('wa prompt 5: actions are an enum; "remove" is not an action but delete is'
 
 test('wa prompt 6: required fields per action are reported by name', () => {
   assert.deepEqual(missingFields('task_change', { action: 'delete' }), ['task']);
-  assert.deepEqual(missingFields('task_change', { action: 'create', title: 'x', assignee: 'a' }), ['description', 'due_date', 'due_time']);
-  assert.deepEqual(missingFields('task_change', { action: 'create' }), ['assignee', 'title', 'description', 'due_date', 'due_time']);
-  assert.deepEqual(missingFields('task_change', { action: 'create', title: 'x', assignee: 'a', description: 'd', due_date: '2026-10-30', due_time: '17:00' }), []);
+  assert.deepEqual(missingFields('task_change', { action: 'create', title: 'x', assignee: 'a' }), ['description', 'due_date', 'due_time', 'proof_required']);
+  assert.deepEqual(missingFields('task_change', { action: 'create' }), ['assignee', 'title', 'description', 'due_date', 'due_time', 'proof_required']);
+  assert.deepEqual(missingFields('task_change', { action: 'create', title: 'x', assignee: 'a', description: 'd', due_date: '2026-10-30', due_time: '17:00', proof_required: false }), [], 'optional proof (false) counts as answered');
   assert.deepEqual(missingFields('checklist', { action: 'done', item: 4 }), []);
   assert.deepEqual(missingFields('leave', { action: 'add', assignee: 'a' }), ['dates']);
 });

@@ -37,6 +37,16 @@ test('proof cleanup: deletes objects older than 30 days and clears their rows fi
   assert.deepEqual(admin.calls.removed, [{ bucket: 'task-proofs', names }]);
 });
 
+test('proof cleanup: checklist screenshots clear checklist rows, task screenshots clear task rows', async () => {
+  const admin = fakeAdmin({ pages: [['checklist/c1/a.webp', 't1/b.webp', 'checklist/c2/c.jpg']] });
+  assert.equal((await cleanupTaskProofs(admin)).removed, 3);
+  assert.deepEqual(admin.calls.updates.map((u) => [u.table, u.list]), [
+    ['checklist_item_updates', ['checklist/c1/a.webp', 'checklist/c2/c.jpg']],
+    ['task_updates', ['t1/b.webp']],
+  ]);
+  assert.deepEqual(admin.calls.removed[0].names, ['checklist/c1/a.webp', 't1/b.webp', 'checklist/c2/c.jpg']);
+});
+
 test('proof cleanup: nothing expired is a no-op; a full page loops; storage failure is reported', async () => {
   const empty = fakeAdmin({ pages: [[]] });
   assert.deepEqual((await cleanupTaskProofs(empty)).removed, 0);
