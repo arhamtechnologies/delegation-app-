@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
 import { clearAuthCache, getAccessToken, syncAuthSession } from '../../lib/auth';
 import { supabaseBrowser, supabaseRecoveryBrowser } from '../../lib/supabase-browser';
-import { AuthLayout, AuthMessage, AuthNote } from '../../components/AuthLayout';
+import { AuthLayout, AuthMessage } from '../../components/AuthLayout';
 import { Loader, Spinner } from '../../components/Loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -159,7 +159,7 @@ export default function UpdatePassword() {
 
   if (checking) return <Loader fullScreen label="Validating your reset link..." />;
 
-  return <AuthLayout eyebrow="Account recovery" title={ready ? 'Set a new password' : 'Reset link expired'} description={ready ? 'Enter a new password for your account.' : INVALID_LINK_MESSAGE} footer={<>{!ready && <Link className="font-medium text-brand hover:underline" href="/login">Back to sign in</Link>}<AuthNote /></>}>
+  return <AuthLayout eyebrow="Account recovery" title={ready ? 'Set a new password' : 'Reset link expired'} description={ready ? 'Enter a new password for your account.' : INVALID_LINK_MESSAGE} footer={!ready ? <Link className="font-medium text-brand hover:underline" href="/login">Back to sign in</Link> : null}>
     {ready ? <form className="grid gap-4" onSubmit={submit}>
       <div className="grid gap-2"><Label htmlFor="update-password">New password</Label><Input id="update-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={password} onChange={(event) => setPassword(event.target.value)} /><p className="text-xs text-muted-foreground">At least 8 characters.</p></div>
       <div className="grid gap-2"><Label htmlFor="update-password-confirmation">Confirm new password</Label><Input id="update-password-confirmation" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>

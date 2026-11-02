@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { clearAuthCache, getCurrentEmployee, syncAuthSession } from '../../lib/auth';
 import { supabaseBrowser } from '../../lib/supabase-browser';
-import { AuthLayout, AuthMessage, AuthNote } from '../../components/AuthLayout';
+import { AuthLayout, AuthMessage } from '../../components/AuthLayout';
 import { Loader, Spinner } from '../../components/Loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,7 +77,7 @@ export default function Login() {
 
   if (checkingSession) return <Loader fullScreen label="Checking your session..." />;
 
-  return <AuthLayout title="Sign in to your workspace" description="Use your company account to continue." footer={<AuthNote />}>
+  return <AuthLayout title="Sign in to your workspace" description="Use your company account to continue.">
     {resetMessage && <AuthMessage tone="success" className="mb-4">{resetMessage}</AuthMessage>}
     <form onSubmit={submit} className="grid gap-4">
       <div className="grid gap-2"><Label htmlFor="email">Email</Label><Input id="email" className="h-11 text-base sm:h-10 sm:text-sm" type="email" autoComplete="email" inputMode="email" placeholder="you@company.com" required value={email} onChange={(event) => setEmail(event.target.value)} /></div>

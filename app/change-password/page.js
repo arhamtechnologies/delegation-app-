@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icons';
 import { clearAuthCache, getAccessToken, getCurrentEmployee } from '../../lib/auth';
-import { AuthLayout, AuthMessage, AuthNote } from '../../components/AuthLayout';
+import { AuthLayout, AuthMessage } from '../../components/AuthLayout';
 import { Loader, Spinner } from '../../components/Loader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,7 +86,7 @@ export default function ChangePassword() {
 
   if (checking) return <Loader fullScreen label="Preparing your account..." />;
 
-  return <AuthLayout eyebrow="Account setup" title="Choose a new password" description={`Welcome${employee?.name ? `, ${employee.name}` : ''}. Your administrator gave you a temporary password. Replace it before you continue.`} footer={<AuthNote />}>
+  return <AuthLayout eyebrow="Account setup" title="Choose a new password" description={`Welcome${employee?.name ? `, ${employee.name}` : ''}. Your administrator gave you a temporary password. Replace it before you continue.`}>
     <form className="grid gap-4" onSubmit={submit}>
       <div className="grid gap-2"><Label htmlFor="new-password">New password</Label><Input id="new-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={password} onChange={(event) => setPassword(event.target.value)} /><p className="text-xs text-muted-foreground">At least 8 characters.</p></div>
       <div className="grid gap-2"><Label htmlFor="confirm-password">Confirm new password</Label><Input id="confirm-password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="new-password" minLength="8" maxLength="128" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>
