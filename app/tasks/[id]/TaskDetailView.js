@@ -152,6 +152,7 @@ export default function TaskDetailView({ id, initialData, initialEmployee }) {
           <PropertyList>
             <Property label="Status"><StatusIcon status={taskStatus} size={15} />{statusLabels[taskStatus]}</Property>
             <Property label="Priority"><PriorityIcon priority={task.priority} />{priorityLabels[task.priority] || 'Normal'}</Property>
+            <Property label="Assigned by">{task.assigned_by_name ? <PersonChip name={task.assigned_by_name} /> : <span className="text-muted-foreground">—</span>}</Property>
             <Property label="Assignee"><PersonChip name={task.assignee?.name || 'Unassigned'} /></Property>
             <Property label="Due"><span className={cn(taskStatus === 'overdue' && 'font-medium text-destructive')}>{formatTaskDeadline(task, { includeYear: true })}</span></Property>
             <Property label="Start">{formatDate(task.start_date)}</Property>

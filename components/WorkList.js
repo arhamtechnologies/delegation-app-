@@ -43,19 +43,22 @@ export function WorkItemRow({ workItem, showAssignee = true, canComplete, comple
   const checklist = workItem.kind === 'checklist';
   const completable = canComplete && status !== 'completed';
   const assignee = workItem.assignee?.name || workItem.employeeName || 'Unassigned';
+  // Who assigned it: shown unless someone added the task for themselves.
+  const assignedBy = workItem.assignedByName && workItem.assignedByName !== assignee ? workItem.assignedByName : null;
   return <WorkRow
     href={getWorkHref(workItem)}
     status={status}
     priority={workItem.priority}
     title={workItem.title}
-    subtitle={showAssignee ? assignee : undefined}
+    subtitle={showAssignee ? (assignedBy ? `${assignedBy} → ${assignee}` : assignee) : undefined}
+    note={!showAssignee && assignedBy ? `From ${assignedBy}` : undefined}
     onStatusClick={completable ? () => onComplete(workItem) : undefined}
     statusBusy={completing === workItem.id}
     statusLabel={completable ? `Mark "${workItem.title}" complete` : undefined}
     trailing={trailing}
     extra={extra}
     type={<MetaChip className={checklist ? 'border-brand/20 bg-brand-soft text-brand-dark' : ''}>{checklist ? 'Checklist' : workItem.category || 'General'}</MetaChip>}
-    person={showAssignee ? <PersonChip name={assignee} /> : undefined}
+    person={showAssignee ? <span className="block min-w-0"><PersonChip name={assignee} />{assignedBy && <span className="mt-0.5 block truncate pl-[26px] text-[12.5px] text-muted-foreground" title={`Assigned by ${assignedBy}`}>by {assignedBy}</span>}</span> : undefined}
     due={getWorkDueLabel(workItem)}
     dueTone={status === 'overdue' ? 'danger' : undefined}
     meta={<>

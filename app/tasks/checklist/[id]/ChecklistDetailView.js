@@ -128,6 +128,7 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
         <Surface className="p-2">
           <PropertyList>
             <Property label="Status"><StatusIcon status={status} size={15} />{statusLabels[status]}</Property>
+            <Property label="Assigned by">{item.template?.assigned_by_name ? <PersonChip name={item.template.assigned_by_name} /> : <span className="text-muted-foreground">—</span>}</Property>
             <Property label="Assignee"><PersonChip name={item.employee?.name || 'Unknown employee'} /></Property>
             <Property label="Due"><span className={cn(status === 'overdue' && 'font-medium text-destructive')}>{formatChecklistDueAt(item.due_at, { includeYear: true })}</span></Property>
             <Property label="Frequency">{frequencyLabel(item.template?.frequency)}</Property>
