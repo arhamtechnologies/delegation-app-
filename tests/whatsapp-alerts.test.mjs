@@ -109,10 +109,10 @@ test('wa alerts 8: a checklist task missing details gets a fixed question, inclu
   const { missingChecklistQuestion, missingFields } = await import('../lib/wa/tools.mjs');
   assert.equal(missingChecklistQuestion([]), null);
   assert.equal(
-    missingChecklistQuestion(missingFields('checklist', { action: 'template_create', assignee: 'Varun', task: 'Cash report', frequency: 'daily' }), 'Cash report'),
+    missingChecklistQuestion(missingFields('checklist', { action: 'template_create', assignee: 'Varun', task: 'Cash report', frequency: 'daily', proof_required: false }), 'Cash report'),
     'To add "Cash report", please send:\n• Time (e.g. 6:30 PM)',
   );
-  assert.match(missingChecklistQuestion(missingFields('checklist', { action: 'template_create' })), /Whom to assign\n• Checklist task.*\n• How often.*\n• Time/);
+  assert.match(missingChecklistQuestion(missingFields('checklist', { action: 'template_create' })), /Whom to assign\n• Checklist task.*\n• How often.*\n• Time.*\n• Proof: mandatory or optional/);
 });
 
 test('wa alerts 9: a new task always asks whether proof is mandatory or optional, last', async () => {
@@ -121,4 +121,12 @@ test('wa alerts 9: a new task always asks whether proof is mandatory or optional
   assert.equal(missingTaskQuestion(missingFields('task_change', complete)), 'To create this task, please send:\n• Proof: mandatory or optional (must a screenshot be added before it can be completed?)');
   assert.deepEqual(missingFields('task_change', { ...complete, proof_required: true }), []);
   assert.match(missingTaskQuestion(missingFields('task_change', { action: 'create', assignee: 'Varun' })), /ETA \(date and time.*\)\n• Proof: mandatory or optional/);
+});
+
+test('wa alerts 10: a new recurring checklist task always asks whether proof is mandatory or optional', async () => {
+  const { missingChecklistQuestion, missingFields } = await import('../lib/wa/tools.mjs');
+  const complete = { action: 'template_create', assignee: 'Varun', task: 'Cash report', frequency: 'daily', due_time: '18:30' };
+  assert.equal(missingChecklistQuestion(missingFields('checklist', complete), 'Cash report'), 'To add "Cash report", please send:\n• Proof: mandatory or optional (must a screenshot be added before it can be marked done?)');
+  assert.deepEqual(missingFields('checklist', { ...complete, proof_required: true }), []);
+  assert.deepEqual(missingFields('checklist', { action: 'template_update', template: 4, proof_required: false }), [], 'switching an existing checklist needs only the R number');
 });

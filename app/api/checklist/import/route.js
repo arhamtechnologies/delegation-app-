@@ -23,7 +23,8 @@ async function parseRequest(request, admin, user) {
   ]);
   if (employeeError || templateError) throw new Error('Checklist import data could not be loaded.');
   const result = await parseChecklistWorkbook(Buffer.from(await file.arrayBuffer()), { filename: file.name, employees: employees || [], existingTemplates: existingTemplates || [], startDate });
-  return { ...result, startDate, allowDuplicates: String(formData.get('allowDuplicates')) === 'true', confirm: String(formData.get('confirm')) === 'true', user };
+  const proofChoice = String(formData.get('proofRequired') || '');
+  return { ...result, startDate, allowDuplicates: String(formData.get('allowDuplicates')) === 'true', confirm: String(formData.get('confirm')) === 'true', proofRequired: proofChoice === 'true' ? true : proofChoice === 'false' ? false : null, user };
 }
 
 export async function POST(request) {
@@ -33,7 +34,8 @@ export async function POST(request) {
     const parsed = await parseRequest(request, authorization.admin, authorization.user);
     if (!parsed.confirm) return Response.json({ success: true, preview: true, sheetName: parsed.sheetName, startDate: parsed.startDate, rows: parsed.rows, summary: parsed.summary });
 
-    const records = templateRowsForImport(parsed.rows, { allowDuplicates: parsed.allowDuplicates, createdBy: parsed.user.id, startDate: parsed.startDate });
+    if (parsed.proofRequired === null) return checklistApiError('Choose whether completion proof is mandatory or optional for the imported checklists.', 400);
+    const records = templateRowsForImport(parsed.rows, { allowDuplicates: parsed.allowDuplicates, createdBy: parsed.user.id, startDate: parsed.startDate }).map((record) => ({ ...record, proof_required: parsed.proofRequired }));
     if (!records.length) return checklistApiError('There are no valid checklist tasks to import.', 400);
     const { data: created, error: insertError } = await authorization.admin.from('checklist_templates').insert(records).select('id,employee_id,task');
     if (insertError) {

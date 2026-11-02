@@ -28,6 +28,17 @@ export function ProofThumb({ path, className }) {
   return <a href={url} target="_blank" rel="noreferrer" className={cn(box, 'hover:ring-2 hover:ring-brand/30')} aria-label="Open proof screenshot"><img src={url} alt="Proof screenshot" className="size-full object-cover object-top" loading="lazy" /></a>;
 }
 
+// Lets directors and the EA switch proof between mandatory and optional on an existing task or checklist.
+export function ProofRequirementSelect({ value, onChange, saving, label = 'Proof requirement' }) {
+  return <span className="inline-flex items-center gap-1.5">
+    <select aria-label={label} className="h-7 rounded-md border border-border bg-background px-1.5 text-[13.5px] focus:border-brand focus:outline-none" value={value ? 'mandatory' : 'optional'} disabled={saving} onChange={(event) => onChange(event.target.value === 'mandatory')}>
+      <option value="mandatory">Mandatory</option>
+      <option value="optional">Optional</option>
+    </select>
+    {saving && <Spinner size={12} />}
+  </span>;
+}
+
 // Side-panel block for a task or checklist page: thumbnails plus an Add button.
 export function ProofPanel({ proofs, onAdd, hint }) {
   return <div className="grid gap-2 p-3">
