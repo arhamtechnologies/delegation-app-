@@ -23,6 +23,20 @@ test('work items 3: status and chronological order match the app', () => {
   assert.deepEqual(sortWorkItemsChronologically([overdue, today], now).map((item) => item.id), ['t2', 't1']);
 });
 
+test('work items 3b: latest overdue time appears first', () => {
+  const now = new Date('2026-10-27T06:00:00.000Z');
+  const earlier = toTaskWorkItem({ id: 't1', title: 'Earlier', status: 'pending', eta: '2026-10-26T09:00:00.000Z' });
+  const latest = toTaskWorkItem({ id: 't2', title: 'Latest', status: 'pending', eta: '2026-10-26T15:00:00.000Z' });
+  assert.deepEqual(sortWorkItemsChronologically([earlier, latest], now).map((item) => item.id), ['t2', 't1']);
+});
+
+test('work items 3c: latest overdue item due today appears first', () => {
+  const now = new Date('2026-10-27T16:00:00.000Z');
+  const earlier = toTaskWorkItem({ id: 't1', title: 'Earlier', status: 'pending', eta: '2026-10-27T09:00:00.000Z' });
+  const latest = toTaskWorkItem({ id: 't2', title: 'Latest', status: 'pending', eta: '2026-10-27T15:00:00.000Z' });
+  assert.deepEqual(sortWorkItemsChronologically([earlier, latest], now).map((item) => item.id), ['t2', 't1']);
+});
+
 test('work items carry who assigned them (task, or the checklist template)', async () => {
   const { toTaskWorkItem, toChecklistWorkItem } = await import('../lib/work-items.mjs');
   assert.equal(toTaskWorkItem({ id: 't1', title: 'GST', assignee_id: 'e1', assigned_by_name: 'Priyanka' }).assignedByName, 'Priyanka');
