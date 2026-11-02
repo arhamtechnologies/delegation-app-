@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { formatChecklistDueAt } from '../lib/checklist-data';
 import { formatTaskDeadline } from '../lib/task-data';
 import { getWorkItemStatus } from '../lib/work-data';
+import { sortWorkItemsChronologically } from '../lib/work-items.mjs';
 
 export const workStatusGroups = [
   { status: 'overdue', title: 'Overdue' },
@@ -29,7 +30,7 @@ export function markWorkItemCompleted(workItem) {
 
 export function groupWorkItems(workItems) {
   const groups = { overdue: [], pending: [], completed: [] };
-  (workItems || []).forEach((workItem) => {
+  sortWorkItemsChronologically(workItems).forEach((workItem) => {
     const status = getWorkItemStatus(workItem);
     if (groups[status]) groups[status].push(workItem);
   });
