@@ -90,3 +90,13 @@ test('wa dashboard stats: totals, per person, assigned today', () => {
   assert.match(text, /Also 135 overdue from earlier days/);
   assert.match(formatDashboardStats({ date: '2026-10-28', summary: { total: 0, pending: 0, overdue: 0, completed: 0, tasks: 0, checklist: 0 }, rows: [], assigned: { total: 0, byPerson: [] } }), /No new tasks assigned today/);
 });
+
+test('wa format: checklist item and recurring task lines say when proof is mandatory', async () => {
+  const { formatChecklistLine, formatTemplateLine } = await import('../lib/wa/format.mjs');
+  const item = { short_code: 4, task: 'Cash report', status: 'pending', due_date: '2026-11-02', due_at: '2026-11-02T13:00:00.000Z', employee: { name: 'Varun' } };
+  assert.match(formatChecklistLine({ ...item, template: { proof_required: true } }, new Date('2026-11-02T05:00:00.000Z')), /, proof mandatory$/);
+  assert.doesNotMatch(formatChecklistLine({ ...item, template: { proof_required: false } }, new Date('2026-11-02T05:00:00.000Z')), /proof/);
+  const template = { short_code: 2, task: 'Cash report', frequency: 'daily', due_time: '18:30', active: true, employee: { name: 'Varun' } };
+  assert.match(formatTemplateLine({ ...template, proof_required: true }), /daily at 6:30 PM, proof mandatory$/);
+  assert.match(formatTemplateLine({ ...template, proof_required: false, active: false }), /6:30 PM \(paused\)$/);
+});

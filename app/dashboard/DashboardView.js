@@ -93,7 +93,7 @@ export default function DashboardView({ initialData }) {
     mapGroups(markWorkItemCompleted);
     const { error: updateError } = await (workItem.kind === 'checklist' ? setChecklistCompletion(workItem.id) : setTaskCompletion(workItem.id, true));
     // Revert just this row so a refresh that landed meanwhile is not thrown away.
-    if (updateError) { mapGroups(() => workItem); if (workItem.kind === 'task' && isProofRequiredError(updateError)) { setJustCompleted(null); setRequiredProof({ kind: 'task', id: workItem.id, title: workItem.title }); } else setError(updateError.message); }
+    if (updateError) { mapGroups(() => workItem); if (isProofRequiredError(updateError)) { setJustCompleted(null); setRequiredProof({ kind: workItem.kind, id: workItem.id, title: workItem.title }); } else setError(updateError.message); }
     else setJustCompleted({ kind: workItem.kind, id: workItem.id, title: workItem.title });
     setCompleting(null);
     if (!updateError) load();

@@ -17,7 +17,7 @@ export async function POST(request) {
   const ids = Array.isArray(payload?.ids) ? [...new Set(payload.ids.filter((id) => typeof id === 'string' && uuidPattern.test(id)))] : [];
   const changes = payload?.changes && typeof payload.changes === 'object' ? payload.changes : {};
   if (!ids.length || !Object.keys(changes).length) return checklistApiError('Select at least one template and one field to change.', 400);
-  const allowedFields = new Set(['employee_id', 'task', 'frequency', 'weekday', 'day_of_month', 'monthly_days', 'due_time', 'start_date', 'active']);
+  const allowedFields = new Set(['employee_id', 'task', 'frequency', 'weekday', 'day_of_month', 'monthly_days', 'due_time', 'start_date', 'active', 'proof_required']);
   if (Object.keys(changes).some((field) => !allowedFields.has(field))) return checklistApiError('The bulk edit contains an unsupported field.', 400);
 
   const { data: templates, error: templateError } = await authorization.admin.from('checklist_templates').select('id,employee_id,task,frequency,weekday,day_of_month,monthly_days,start_date,due_time,active').in('id', ids);
@@ -34,6 +34,7 @@ export async function POST(request) {
   if (Object.prototype.hasOwnProperty.call(changes, 'due_time') && !validTime(changes.due_time)) return checklistApiError('Due time must be between 00:00 and 23:59.', 400);
   if (Object.prototype.hasOwnProperty.call(changes, 'start_date') && !validDate(changes.start_date)) return checklistApiError('Start date must be a valid date.', 400);
   if (Object.prototype.hasOwnProperty.call(changes, 'active') && typeof changes.active !== 'boolean') return checklistApiError('Active status must be true or false.', 400);
+  if (Object.prototype.hasOwnProperty.call(changes, 'proof_required') && typeof changes.proof_required !== 'boolean') return checklistApiError('Choose whether proof is mandatory or optional.', 400);
 
   const normalizedChanges = { ...changes };
   if (Object.prototype.hasOwnProperty.call(normalizedChanges, 'task')) normalizedChanges.task = normalizedChanges.task.trim();
@@ -66,15 +67,19 @@ export async function POST(request) {
       if (!days.length || days.some((day) => !Number.isInteger(day) || day < 1 || day > 31)) return checklistApiError('Choose one or more valid monthly days.', 400);
     }
   }
+  // Only fields that make up the duplicate key can create a duplicate (a proof-only change never does).
+  const keyFields = ['employee_id', 'task', 'frequency', 'weekday', 'day_of_month', 'monthly_days', 'due_time', 'active'];
   const duplicateKeys = new Set();
-  const outsideTemplates = await authorization.admin.from('checklist_templates').select('id,employee_id,task,frequency,weekday,day_of_month,monthly_days,due_time,active').eq('active', true).not('id', 'in', `(${ids.join(',')})`);
-  if (outsideTemplates.error) return checklistApiError('Existing checklist templates could not be checked for duplicates.', 500);
-  const outsideKeys = new Set((outsideTemplates.data || []).map(buildChecklistTemplateKey));
-  for (const template of nextTemplates) {
-    if (!template.active) continue;
-    const key = buildChecklistTemplateKey(template);
-    if (outsideKeys.has(key) || duplicateKeys.has(key)) return checklistApiError('The selected changes would create a duplicate active checklist template.', 409);
-    duplicateKeys.add(key);
+  if (keyFields.some((field) => Object.prototype.hasOwnProperty.call(changes, field))) {
+    const outsideTemplates = await authorization.admin.from('checklist_templates').select('id,employee_id,task,frequency,weekday,day_of_month,monthly_days,due_time,active').eq('active', true).not('id', 'in', `(${ids.join(',')})`);
+    if (outsideTemplates.error) return checklistApiError('Existing checklist templates could not be checked for duplicates.', 500);
+    const outsideKeys = new Set((outsideTemplates.data || []).map(buildChecklistTemplateKey));
+    for (const template of nextTemplates) {
+      if (!template.active) continue;
+      const key = buildChecklistTemplateKey(template);
+      if (outsideKeys.has(key) || duplicateKeys.has(key)) return checklistApiError('The selected changes would create a duplicate active checklist template.', 409);
+      duplicateKeys.add(key);
+    }
   }
 
   const { data: updated, error: updateError } = await authorization.admin.from('checklist_templates').update(normalizedChanges).in('id', ids).select('id');

@@ -10,11 +10,11 @@ import { formatDate } from '../../../../components/UI';
 import { ListEmpty, PersonChip, Property, PropertyList, StatusIcon, Surface } from '../../../../components/Workflow';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { getCurrentEmployee, peekCurrentEmployee } from '../../../../lib/auth';
-import { addChecklistItemUpdate, canCompleteChecklist, checklistFrequencies, formatChecklistDueAt, getChecklistStatus, setChecklistCompletion } from '../../../../lib/checklist-data';
+import { getAccessToken, getCurrentEmployee, peekCurrentEmployee } from '../../../../lib/auth';
+import { addChecklistItemUpdate, canCompleteChecklist, checklistFrequencies, checklistManagerRoles, formatChecklistDueAt, getChecklistStatus, setChecklistCompletion } from '../../../../lib/checklist-data';
 import { isFreshRender, loadChecklistDetail } from '../../../../lib/page-data';
-import { isProofUpdate } from '../../../../lib/task-proofs';
-import { ProofDialog, ProofPanel, ProofThumb } from '../../../../components/TaskProof';
+import { isProofUpdate, taskHasProof } from '../../../../lib/task-proofs';
+import { ProofDialog, ProofPanel, ProofRequirementSelect, ProofThumb } from '../../../../components/TaskProof';
 
 const statusLabels = { pending: 'Pending', overdue: 'Overdue', completed: 'Completed', deactivated: 'Deactivated' };
 const statusNotes = {
@@ -36,6 +36,7 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [proofMode, setProofMode] = useState(null);
+  const [proofSaving, setProofSaving] = useState(false);
 
   const load = useCallback(async ({ background = false } = {}) => {
     if (!id) return;
@@ -66,6 +67,26 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
     setSaving(false);
   }
 
+  // The setting lives on the recurring checklist, so it applies to every open item it generates.
+  async function changeProofRequired(required) {
+    const templateId = item.template?.id || item.template_id;
+    if (!templateId || required === Boolean(item.template?.proof_required)) return;
+    setProofSaving(true);
+    setError('');
+    const previous = item.template?.proof_required;
+    setItem((current) => ({ ...current, template: { ...current.template, proof_required: required } }));
+    try {
+      const token = await getAccessToken();
+      const response = await fetch('/api/checklist/bulk-update', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ ids: [templateId], changes: { proof_required: required } }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'The proof setting could not be saved.');
+    } catch (saveError) {
+      setItem((current) => ({ ...current, template: { ...current.template, proof_required: previous } }));
+      setError(saveError.message);
+    }
+    setProofSaving(false);
+  }
+
   function proofSaved({ update, completed }) {
     if (update) setUpdates((current) => [...current, update]);
     if (completed) setItem((current) => ({ ...current, status: 'completed', completed_at: new Date().toISOString() }));
@@ -88,6 +109,8 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
   const status = getChecklistStatus(item);
   const canComplete = canCompleteChecklist(currentEmployee?.role, currentEmployee?.id, item.employee_id) && status !== 'deactivated';
   const proofs = updates.filter((update) => isProofUpdate(update) && !update.pending);
+  const proofRequired = Boolean(item.template?.proof_required);
+  const canManage = checklistManagerRoles.includes(currentEmployee?.role);
   return <div className={pageContainerClass}>
     <div className="mb-4 flex items-center justify-between gap-3">
       {back}
@@ -110,13 +133,14 @@ export default function ChecklistDetailView({ id, initialData, initialEmployee }
             <Property label="Frequency">{frequencyLabel(item.template?.frequency)}</Property>
             <Property label="Due time">{item.template?.due_time?.slice(0, 5) || '—'}</Property>
             <Property label="Rule starts">{formatDate(item.template?.start_date || item.due_date)}</Property>
+            <Property label="Proof">{canManage ? <ProofRequirementSelect value={proofRequired} saving={proofSaving} onChange={changeProofRequired} label="Proof requirement for this recurring checklist" /> : proofRequired ? 'Mandatory' : 'Optional'}</Property>
           </PropertyList>
         </Surface>
         {(canComplete || proofs.length > 0) && <Surface>{canComplete
-          ? <ProofPanel proofs={proofs} onAdd={() => setProofMode('attach')} />
+          ? <ProofPanel proofs={proofs} onAdd={() => setProofMode('attach')} hint={proofRequired ? 'Proof is mandatory. Add a screenshot before completing this item.' : undefined} />
           : <div className="grid gap-2 p-3"><h2 className="text-[14px] font-semibold text-foreground">Proof screenshots</h2><div className="flex flex-wrap gap-2">{proofs.map((proof) => <ProofThumb key={proof.id} path={proof.proof_url} />)}</div></div>}</Surface>}
       </aside>
     </div>
-    <ProofDialog target={proofMode ? { kind: 'checklist', id: item.id, title: item.task } : null} mode={proofMode || 'complete'} onClose={() => setProofMode(null)} onDone={proofSaved} />
+    <ProofDialog target={proofMode ? { kind: 'checklist', id: item.id, title: item.task } : null} mode={proofMode || 'complete'} required={proofRequired && !taskHasProof(updates)} onClose={() => setProofMode(null)} onDone={proofSaved} />
   </div>;
 }

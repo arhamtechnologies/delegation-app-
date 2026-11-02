@@ -11,12 +11,12 @@ import { ListEmpty, PersonChip, PriorityIcon, Property, PropertyList, StatusIcon
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { getAuthenticatedUser } from '../../../lib/auth';
+import { canCreateTasks, getAuthenticatedUser, getCurrentEmployee, peekCurrentEmployee } from '../../../lib/auth';
 import { isFreshRender, loadTaskDetail } from '../../../lib/page-data';
 import { formatTaskDeadline, getTaskStatus, setTaskCompletion } from '../../../lib/task-data';
 import { supabaseBrowser } from '../../../lib/supabase-browser';
 import { isProofUpdate, taskHasProof } from '../../../lib/task-proofs';
-import { ProofDialog, ProofPanel } from '../../../components/TaskProof';
+import { ProofDialog, ProofPanel, ProofRequirementSelect } from '../../../components/TaskProof';
 
 const statusLabels = { pending: 'Pending', overdue: 'Overdue', completed: 'Completed' };
 const priorityLabels = { normal: 'Normal', high: 'High', critical: 'Critical' };
@@ -31,7 +31,7 @@ function isExternalLink(value) {
   return /^https?:\/\//i.test(value || '');
 }
 
-export default function TaskDetailView({ id, initialData }) {
+export default function TaskDetailView({ id, initialData, initialEmployee }) {
   const [task, setTask] = useState(initialData?.task || null);
   const [updates, setUpdates] = useState(initialData?.updates || []);
   const [completionNotes, setCompletionNotes] = useState(initialData?.task?.completion_notes || '');
@@ -40,6 +40,13 @@ export default function TaskDetailView({ id, initialData }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [proofMode, setProofMode] = useState(null);
+  const [currentEmployee, setCurrentEmployee] = useState(() => initialEmployee || peekCurrentEmployee()?.employee || null);
+  const [proofSaving, setProofSaving] = useState(false);
+
+  useEffect(() => {
+    if (currentEmployee) return;
+    getCurrentEmployee().then(({ employee }) => { if (employee) setCurrentEmployee(employee); }).catch(() => {});
+  }, [currentEmployee]);
 
   const load = useCallback(async ({ background = false } = {}) => {
     if (!id) return;
@@ -71,6 +78,18 @@ export default function TaskDetailView({ id, initialData }) {
     if (updateError) { setTask(previous); setError(updateError.message); }
     else load({ background: true });
     setSaving(false);
+  }
+
+  // Directors and the EA can switch an existing task between mandatory and optional proof.
+  async function changeProofRequired(required) {
+    if (required === Boolean(task.proof_required)) return;
+    setProofSaving(true);
+    setError('');
+    const previous = task.proof_required;
+    setTask((current) => ({ ...current, proof_required: required }));
+    const { error: updateError } = await supabaseBrowser().from('tasks').update({ proof_required: required, updated_at: new Date().toISOString() }).eq('id', id);
+    if (updateError) { setTask((current) => ({ ...current, proof_required: previous })); setError(updateError.message); }
+    setProofSaving(false);
   }
 
   function proofSaved({ update, completed }) {
@@ -137,7 +156,7 @@ export default function TaskDetailView({ id, initialData }) {
             <Property label="Due"><span className={cn(taskStatus === 'overdue' && 'font-medium text-destructive')}>{formatTaskDeadline(task, { includeYear: true })}</span></Property>
             <Property label="Start">{formatDate(task.start_date)}</Property>
             <Property label="Category">{task.category || 'General'}</Property>
-            <Property label="Proof">{task.proof_required ? 'Mandatory' : 'Optional'}{proofs.length ? ` · ${proofs.length} screenshot${proofs.length === 1 ? '' : 's'}` : ''}</Property>
+            <Property label="Proof">{canCreateTasks(currentEmployee?.role) ? <ProofRequirementSelect value={Boolean(task.proof_required)} saving={proofSaving} onChange={changeProofRequired} /> : task.proof_required ? 'Mandatory' : 'Optional'}{proofs.length ? ` · ${proofs.length} screenshot${proofs.length === 1 ? '' : 's'}` : ''}</Property>
             <Property label="Updated"><span suppressHydrationWarning>{relativeTime(task.updated_at || task.created_at)}</span></Property>
           </PropertyList>
         </Surface>
