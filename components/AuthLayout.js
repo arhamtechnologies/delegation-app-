@@ -29,7 +29,3 @@ export function AuthMessage({ tone = 'error', className, children }) {
     <AlertDescription className={cn(tone === 'success' && 'text-emerald-800')}>{children}</AlertDescription>
   </Alert>;
 }
-
-export function AuthNote() {
-  return <span className="inline-flex items-center gap-1.5 text-xs"><Icon name="shield" size={14} />Your password is protected by Supabase Auth.</span>;
-}
