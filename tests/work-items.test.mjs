@@ -22,3 +22,11 @@ test('work items 3: status and chronological order match the app', () => {
   assert.equal(getWorkItemStatus(today, now), 'pending');
   assert.deepEqual(sortWorkItemsChronologically([overdue, today], now).map((item) => item.id), ['t2', 't1']);
 });
+
+test('work items carry who assigned them (task, or the checklist template)', async () => {
+  const { toTaskWorkItem, toChecklistWorkItem } = await import('../lib/work-items.mjs');
+  assert.equal(toTaskWorkItem({ id: 't1', title: 'GST', assignee_id: 'e1', assigned_by_name: 'Priyanka' }).assignedByName, 'Priyanka');
+  assert.equal(toTaskWorkItem({ id: 't2', title: 'GST', assignee_id: 'e1' }).assignedByName, null);
+  assert.equal(toChecklistWorkItem({ id: 'c1', task: 'Cash', employee_id: 'e1', assigned_by_name: 'Ankit Jain' }).assignedByName, 'Ankit Jain');
+  assert.equal(toChecklistWorkItem({ id: 'c2', task: 'Cash', employee_id: 'e1', template: { assigned_by_name: 'Anekant Jain' } }).assignedByName, 'Anekant Jain');
+});

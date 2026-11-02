@@ -120,7 +120,7 @@ export function WorkColumnsHeader({ showPerson = true, extraLabel, hasActions = 
 }
 
 // One dense work row. On phones the cells collapse into a wrapped line under the title.
-export function WorkRow({ href, status, priority, title, subtitle, type, person, due, dueTone, extra, meta, trailing, onStatusClick, statusBusy, statusLabel, className }) {
+export function WorkRow({ href, status, priority, title, subtitle, note, type, person, due, dueTone, extra, meta, trailing, onStatusClick, statusBusy, statusLabel, className }) {
   const statusNode = <StatusIcon status={status} />;
   const titleClass = 'line-clamp-2 text-[15.5px] leading-snug font-medium text-foreground sm:block sm:truncate sm:text-[14.5px]';
   return <li className={cn('group relative flex min-h-11 items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/50 sm:px-4', className)}>
@@ -129,6 +129,7 @@ export function WorkRow({ href, status, priority, title, subtitle, type, person,
     <div className="min-w-0 flex-1">
       {href ? <Link href={href} prefetch={false} className={cn(titleClass, 'after:absolute after:inset-0')}>{title}</Link> : <span className={titleClass}>{title}</span>}
       {subtitle && <span className="block truncate text-[13.5px] text-muted-foreground sm:hidden">{subtitle}</span>}
+      {note && <span className="block truncate text-[13px] text-muted-foreground">{note}</span>}
       {meta && <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] text-muted-foreground sm:hidden">{meta}</div>}
     </div>
     <span className={cn('hidden shrink-0 sm:block', workColumn.type)}>{type}</span>
