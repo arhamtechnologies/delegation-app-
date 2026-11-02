@@ -2,27 +2,23 @@
 -- Run BEFORE deploying the code that reads assigned_by_name from the work lists. Safe to run again.
 --   * tasks.assigned_by_name / checklist_templates.assigned_by_name already exist (20261029120000,
 --     20261031090000) and are filled by the WhatsApp bot, where several director numbers share one login.
---   * App-created rows get the creator's name automatically (the WhatsApp display name linked to that login,
---     else the employee name, as the alerts already do); existing rows are filled the same way. Updating only
---     these columns fires no notification or item sync. Signed-in users can't change them afterwards.
+--   * App-created rows get the name of the account that created them, as set on the People page (so work from
+--     the Administrator login shows that account, e.g. "Admin"); existing rows are filled the same way. Updating
+--     only these columns fires no notification or item sync. Signed-in users can't change them afterwards.
 --   * work_items and follow_up_work_items gain assigned_by_name as their last column.
 
--- The name the WhatsApp alerts already use for a login: its linked display name (the shared Administrator
--- login's number is Ankit Jain's, see 20261029120000), otherwise the employee name.
-create or replace function public.assigner_display_name(p_auth_user_id uuid)
+-- The account's own name (employees.name). Work given from the shared Administrator login shows that account,
+-- not a director; the WhatsApp bot still records the director who actually sent the message.
+create or replace function public.assigner_account_name(p_auth_user_id uuid)
 returns text
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select coalesce(nullif(trim(link.display_name), ''), e.name)
-  from public.employees e
-  left join public.wa_chat_links link on link.chat_id = e.whatsapp_chat_id
-  where e.auth_user_id = p_auth_user_id
-  limit 1;
+  select e.name from public.employees e where e.auth_user_id = p_auth_user_id limit 1;
 $$;
-revoke all on function public.assigner_display_name(uuid) from public, anon, authenticated;
+revoke all on function public.assigner_account_name(uuid) from public, anon, authenticated;
 
 create or replace function public.set_assigned_by_name()
 returns trigger
@@ -42,10 +38,10 @@ begin
   -- A signed-in app user is always recorded as themselves; trusted backends (the WhatsApp bot) may name the
   -- director who actually sent the message, otherwise the creating login is used.
   if auth.uid() is not null then
-    new.assigned_by_name := public.assigner_display_name(auth.uid());
+    new.assigned_by_name := public.assigner_account_name(auth.uid());
     new.assigned_by_chat_id := null;
   elsif coalesce(trim(new.assigned_by_name), '') = '' then
-    new.assigned_by_name := public.assigner_display_name(new.created_by);
+    new.assigned_by_name := public.assigner_account_name(new.created_by);
   end if;
   return new;
 end;
@@ -64,11 +60,11 @@ for each row execute function public.set_assigned_by_name();
 
 -- Existing rows: filled from the login that created them (runs with no signed-in user, so the trigger allows it).
 update public.tasks
-set assigned_by_name = public.assigner_display_name(created_by)
+set assigned_by_name = public.assigner_account_name(created_by)
 where coalesce(trim(assigned_by_name), '') = '' and created_by is not null;
 
 update public.checklist_templates
-set assigned_by_name = public.assigner_display_name(created_by)
+set assigned_by_name = public.assigner_account_name(created_by)
 where coalesce(trim(assigned_by_name), '') = '' and created_by is not null;
 
 -- Same as 20261024061358_optimize_work_list_queries.sql, plus assigned_by_name at the end.
