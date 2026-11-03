@@ -202,7 +202,7 @@ export default function ChecklistView({ initialData }) {
     if (form.frequency === 'monthly' && !form.monthly_days.length) { setError('Choose at least one monthly day.'); setSaving(false); return; }
     if (typeof form.proof_required !== 'boolean') { setError('Choose whether completion proof is mandatory or optional.'); setSaving(false); return; }
     const record = { employee_id: form.employee_id, task: form.task.trim(), frequency: form.frequency, weekday: form.frequency === 'weekly' ? Number(form.weekday) : null, day_of_month: form.frequency === 'monthly' ? Number(form.monthly_days[0]) : null, monthly_days: form.frequency === 'monthly' ? form.monthly_days.map(Number) : [], start_date: form.start_date, due_time: form.due_time, active: form.active, proof_required: form.proof_required };
-    const token = await getAccessToken();
+    const token = await getAccessToken({ forceRefresh: true });
     const response = await fetch('/api/checklist/templates', { method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(editing ? { ...record, id: editing.id } : record) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) setError(payload.error || 'The checklist template could not be saved.');
@@ -213,7 +213,7 @@ export default function ChecklistView({ initialData }) {
   async function deactivate(template) {
     const label = template.active ? 'deactivate' : 'activate';
     if (!window.confirm(`${label[0].toUpperCase()}${label.slice(1)} this recurring checklist?`)) return;
-    const token = await getAccessToken();
+    const token = await getAccessToken({ forceRefresh: true });
     const response = await fetch('/api/checklist/templates', { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id: template.id, employee_id: template.employee_id, task: template.task, frequency: template.frequency, weekday: template.weekday, day_of_month: template.day_of_month, monthly_days: template.monthly_days || [], start_date: template.start_date, due_time: template.due_time?.slice(0, 5), active: !template.active }) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) setError(payload.error || 'The checklist template could not be updated.'); else { setMessage(`Checklist ${template.active ? 'deactivated' : 'activated'}.`); await load(); }
@@ -221,7 +221,7 @@ export default function ChecklistView({ initialData }) {
 
   async function deleteTemplate(template) {
     if (!window.confirm(`Permanently delete "${template.task}"? This removes the checklist template and all of its generated checklist items. This cannot be undone.`)) return;
-    const token = await getAccessToken();
+    const token = await getAccessToken({ forceRefresh: true });
     const response = await fetch('/api/checklist/templates', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id: template.id }) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) setError(payload.error || 'The checklist task could not be deleted.'); else { setMessage('Checklist task and generated items deleted.'); await load(); }

@@ -232,7 +232,7 @@ export default function TasksView({ initialData }) {
     setError('');
     setMessage('');
     patchWorkItems((items) => items.filter((item) => !(item.kind === 'task' && item.id === workItem.id)));
-    const token = await getAccessToken();
+    const token = await getAccessToken({ forceRefresh: true });
     const response = await fetch('/api/tasks', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id: workItem.id }) });
     const payload = await response.json().catch(() => ({}));
     // Reload rather than restore a snapshot: filters or pages may have changed while the request ran.
