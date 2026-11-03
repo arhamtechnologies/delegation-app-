@@ -61,7 +61,7 @@ export async function POST(request) {
   if (requesterError) return jsonError('Your employee permissions could not be verified.', 500);
   if (!requester || !managerRoles.has(requester.role)) return jsonError('Only authorized workspace managers can send login details.', 403);
 
-  let query = adminClient.from('employees').select('id,name,active,auth_user_id').order('name');
+  let query = adminClient.from('employees').select('id,name,username,active,auth_user_id').order('name');
   query = sendToAll ? query.eq('active', true).not('auth_user_id', 'is', null) : query.in('id', employeeIds);
   const { data: employees, error: employeesError } = await query;
   if (employeesError) return jsonError('Unable to load the employees.', 500);
@@ -101,7 +101,7 @@ export async function POST(request) {
         skipped.push({ name: employee.name, reason: 'password link could not be created' });
         continue;
       }
-      const message = buildCredentialEmail({ name: employee.name, email: employee.email, appUrl, setupUrl: linkData.properties.action_link, isNew: false });
+      const message = buildCredentialEmail({ name: employee.name, username: employee.username, email: employee.email, appUrl, setupUrl: linkData.properties.action_link, isNew: false });
       messages.push({ to: employee.email, ...message, name: employee.name });
     }
     if (!messages.length) continue;

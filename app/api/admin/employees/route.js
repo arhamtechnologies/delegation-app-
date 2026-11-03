@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { createSupabaseAdminClient, createSupabaseUserClient, getBearerToken } from '../../../../lib/supabase-server';
 import { buildCredentialEmail, sendCredentialEmail, siteOrigin } from '../../../../lib/server/credential-email.mjs';
 
@@ -6,6 +5,7 @@ const managerRoles = new Set(['super_admin', 'assigner', 'ea']);
 const employeeRoles = new Set(['super_admin', 'assigner', 'ea', 'doer']);
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const temporaryPassword = '123456';
 
 function errorResponse(message, status) {
   return Response.json({ error: message }, { status });
@@ -13,6 +13,20 @@ function errorResponse(message, status) {
 
 function isDuplicateAuthError(error) {
   return error?.code === 'email_exists' || /already registered|already exists|duplicate/i.test(error?.message || '');
+}
+
+function usernamePrefix(role) {
+  return { super_admin: 'sa', assigner: 'as', ea: 'ea', doer: 'do' }[role] || 'do';
+}
+
+async function createUsername(adminClient, role) {
+  const prefix = usernamePrefix(role);
+  const { data, error } = await adminClient.from('employees').select('username').ilike('username', `${prefix}-%`);
+  if (error) throw error;
+  const used = new Set((data || []).map((row) => row.username));
+  let suffix = 1;
+  while (used.has(`${prefix}-${String(suffix).padStart(3, '0')}`)) suffix += 1;
+  return `${prefix}-${String(suffix).padStart(3, '0')}`;
 }
 
 function validatePayload(payload) {
@@ -80,7 +94,7 @@ export async function POST(request) {
     return errorResponse('Employee provisioning is not configured on the server.', 503);
   }
 
-  const initialPassword = randomBytes(32).toString('base64url');
+  const initialPassword = temporaryPassword;
   const { data: { user: authUser } = {}, error: authError } = await adminClient.auth.admin.createUser({
     email: validation.value.email,
     password: initialPassword,
@@ -91,13 +105,26 @@ export async function POST(request) {
   if (authError || !authUser) {
     if (isDuplicateAuthError(authError)) return errorResponse('An Auth account already exists for this email address.', 409);
     console.error('Unable to create the employee Auth user.', { code: authError?.code, message: authError?.message });
-    return errorResponse('The employee login account could not be created.', 500);
+    if (/password.*(length|characters)|weak password|password.*policy/i.test(authError?.message || '')) {
+      return errorResponse('The temporary password 123456 was rejected by Supabase. Check the Supabase Auth password policy, then try again.', 400);
+    }
+    return errorResponse(authError?.message || 'The employee login account could not be created.', 500);
+  }
+
+  let username;
+  try {
+    username = await createUsername(adminClient, validation.value.role);
+  } catch (error) {
+    console.error('Unable to generate an employee username.', { code: error.code, message: error.message });
+    await adminClient.auth.admin.deleteUser(authUser.id);
+    return errorResponse('A unique employee username could not be generated.', 500);
   }
 
   const { data: employee, error: employeeError } = await adminClient
     .from('employees')
     .insert({
       auth_user_id: authUser.id,
+      username,
       name: validation.value.name,
       email: validation.value.email,
       mobile: validation.value.mobile,
@@ -105,7 +132,7 @@ export async function POST(request) {
       active: validation.value.active,
       must_change_password: true,
     })
-    .select('id,auth_user_id,name,email,mobile,role,active,must_change_password')
+    .select('id,auth_user_id,username,name,email,mobile,role,active,must_change_password')
     .single();
 
   if (employeeError || !employee) {
@@ -133,7 +160,7 @@ export async function POST(request) {
 
   let emailResult;
   try {
-    const message = buildCredentialEmail({ name: validation.value.name, email: validation.value.email, appUrl, setupUrl: linkData.properties.action_link, isNew: true });
+    const message = buildCredentialEmail({ name: validation.value.name, username, email: validation.value.email, temporaryPassword: initialPassword, appUrl, setupUrl: linkData.properties.action_link, isNew: true });
     emailResult = await sendCredentialEmail({ to: validation.value.email, ...message });
   } catch (error) {
     console.error('Employee setup email request failed.', { message: error.message });
