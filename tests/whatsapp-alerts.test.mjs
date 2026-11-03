@@ -4,7 +4,7 @@ import { buildAlertMessages, dueSummaryDate, planChecklistAlerts, planChecklistI
 
 const eta = '2026-10-29T12:00:00.000Z'; // 5:30 PM India time
 const at = (minutesFromEta) => new Date(Date.parse(eta) + minutesFromEta * 60000);
-const anekant = { name: 'Anekant Jain', chatId: '919575000000@c.us' };
+const anekant = { name: 'Anekant Jain', chatId: '919575011337@c.us' };
 const ea = '919800000000@c.us';
 const task = (overrides = {}) => ({ id: 't1', title: 'GST report', description: 'File the October GST returns', eta, created_at: at(-120).toISOString(), assigneeName: 'Varun', director: anekant, ...overrides });
 
