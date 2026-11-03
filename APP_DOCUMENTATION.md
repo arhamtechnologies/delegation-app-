@@ -122,7 +122,7 @@ The Supabase database uses **Row Level Security (RLS)** extensively. All tables 
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
-| `employees` | Workspace roster linked to Supabase Auth | `id`, `auth_user_id` (FK), `name`, `email`, `role` (enum), `active`, `must_change_password`, `department_id`, `designation_id`, `shift_id` |
+| `employees` | Workspace roster linked to Supabase Auth | `id`, `auth_user_id` (FK), `username` (unique, e.g. `ea-001`), `name`, `email`, `role` (enum), `active`, `must_change_password`, `department_id`, `designation_id`, `shift_id` |
 | `tasks` | Ad-hoc delegated tasks | `id`, `title`, `description`, `priority`, `status` (enum), `eta`, `assignee_id` (FK), `created_by` (FK), `follower_ea_id`, `category`, `start_date`, `instructions`, `proof_required`, `completion_notes`, `attachments` (JSONB) |
 | `task_updates` | Audit trail for tasks | `id`, `task_id` (FK), `author_user_id` (FK), `update_type`, `remark`, `proof_url` |
 | `checklist_templates` | Recurring checklist definitions | `id`, `employee_id` (FK), `task`, `frequency` (daily/weekly/every_15_days/monthly), `weekday`, `day_of_month`, `monthly_days` (smallint[]), `start_date`, `due_time`, `active`, `created_by` |
@@ -193,7 +193,7 @@ checklist_freq:  'daily' | 'weekly' | 'every_15_days' | 'monthly'
 
 - **Email/password login** via Supabase Auth
 - **Session persistence** with auto-refresh
-- **First-login password change** enforced via `must_change_password` flag
+- **First-login password change** enforced via `must_change_password` flag; new employees sign in with their generated username (or email) and temporary password `123456`, then choose a password of at least 8 characters
 - **Password reset flow**: forgot password → email link → update-password page
 - **Route protection**: AppShell checks auth state on every route change
 - **Role-based redirects**: Non-managers blocked from /employees, /mis, /calendar

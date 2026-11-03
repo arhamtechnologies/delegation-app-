@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,6 +57,35 @@ export default function Login() {
     setError('');
     setLoading(true);
     const supabase = supabaseBrowser();
+    const identifier = username.trim().toLowerCase();
+    const isEmail = identifier.includes('@');
+    const isUsername = /^[a-z]{2}-\d{3}$/.test(identifier);
+    let email = identifier;
+    if (!isEmail && !isUsername) {
+      setError('Enter a valid username such as ea-001 or a work email address.');
+      setLoading(false);
+      return;
+    }
+    if (isUsername) {
+      try {
+        const response = await fetch('/api/auth/resolve-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: identifier }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.email) {
+          setError(result.error || 'Invalid username/email or password.');
+          setLoading(false);
+          return;
+        }
+        email = result.email;
+      } catch {
+        setError('The login service is unavailable. Please try again.');
+        setLoading(false);
+        return;
+      }
+    }
     const { data: { session } = {}, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
       setError(signInError.message);
@@ -80,7 +109,7 @@ export default function Login() {
   return <AuthLayout title="Sign in to your workspace" description="Use your company account to continue.">
     {resetMessage && <AuthMessage tone="success" className="mb-4">{resetMessage}</AuthMessage>}
     <form onSubmit={submit} className="grid gap-4">
-      <div className="grid gap-2"><Label htmlFor="email">Email</Label><Input id="email" className="h-11 text-base sm:h-10 sm:text-sm" type="email" autoComplete="email" inputMode="email" placeholder="you@company.com" required value={email} onChange={(event) => setEmail(event.target.value)} /></div>
+      <div className="grid gap-2"><Label htmlFor="username">Username or email</Label><Input id="username" className="h-11 text-base sm:h-10 sm:text-sm" type="text" autoComplete="username" placeholder="e.g. ea-001 or you@company.com" required value={username} onChange={(event) => setUsername(event.target.value)} /></div>
       <div className="grid gap-2"><div className="flex items-center justify-between"><Label htmlFor="password">Password</Label><Link className="text-sm font-medium text-brand hover:underline" href="/forgot-password">Forgot password?</Link></div><Input id="password" className="h-11 text-base sm:h-10 sm:text-sm" type="password" autoComplete="current-password" placeholder="Enter your password" required value={password} onChange={(event) => setPassword(event.target.value)} /></div>
       {error && <AuthMessage>{error}</AuthMessage>}
       <Button className="mt-2 h-11 w-full text-[16px] sm:h-10 sm:text-sm" type="submit" disabled={loading}>{loading ? <><Spinner />Signing in...</> : 'Sign in'}</Button>
