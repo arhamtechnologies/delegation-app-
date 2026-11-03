@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildAlertMessages, dueSummaryDate, planChecklistAlerts, planTaskAlerts, reminderStage } from '../lib/wa/alerts.mjs';
+import { buildAlertMessages, dueSummaryDate, planChecklistAlerts, planChecklistItemAlerts, planTaskAlerts, reminderStage } from '../lib/wa/alerts.mjs';
 
 const eta = '2026-10-29T12:00:00.000Z'; // 5:30 PM India time
 const at = (minutesFromEta) => new Date(Date.parse(eta) + minutesFromEta * 60000);
@@ -32,7 +32,22 @@ test('wa alerts 2: only a fresh director task gets an assignment notice; the ETA
   assert.equal(reminder.anchor, eta);
 });
 
-test('wa alerts 3: the EA hears about every stage with person, task, description and due time; the director only at 15 minutes', () => {
+test('wa alerts 2b: checklist items use their due_at for the same three reminder stages', () => {
+  const item = { id: 'c1', task: 'Cash report', due_at: eta, employeeName: 'Varun', director: anekant };
+  assert.deepEqual(planChecklistItemAlerts([item], at(-4)).map((alert) => alert.stage), ['due_soon']);
+  assert.deepEqual(planChecklistItemAlerts([item], at(5)).map((alert) => alert.stage), ['overdue']);
+  assert.deepEqual(planChecklistItemAlerts([item], at(15)).map((alert) => alert.stage), ['escalated']);
+  assert.equal(planChecklistItemAlerts([item], at(15))[0].itemId, 'c1');
+});
+
+test('wa alerts 2c: a checklist item 15 minutes overdue is sent to its assigning director', () => {
+  const itemAlert = planChecklistItemAlerts([{ id: 'c1', task: 'Cash report', due_at: eta, employeeName: 'Varun', director: anekant }], at(15))[0];
+  const messages = buildAlertMessages([itemAlert], [ea]);
+  assert.deepEqual(messages.map((message) => message.chatId), [anekant.chatId]);
+  assert.match(messages[0].text, /🚨 Still not done 15 minutes after the ETA\n\nPerson: Varun\nTask: Cash report\nDue: Oct 29 · 5:30 PM\nAssigned by: Anekant Jain/);
+});
+
+test('wa alerts 3: the EA gets the first two stages and the director gets the 15-minute escalation', () => {
   const alerts = [
     { ...task(), taskId: 't1', stage: 'assigned', anchor: eta },
     { ...task({ assigneeName: 'Vipul', title: 'Stock count', description: null }), taskId: 't2', stage: 'due_soon', anchor: eta },
@@ -47,8 +62,8 @@ test('wa alerts 3: the EA hears about every stage with person, task, description
   assert.doesNotMatch(messages[0].text, /#\d|t1|t2/, 'no internal ids');
 
   const escalated = buildAlertMessages([{ ...task(), taskId: 't1', stage: 'escalated', anchor: eta }], [ea]);
-  assert.deepEqual(escalated.map((message) => message.chatId), [ea, anekant.chatId]);
-  assert.ok(escalated.every((message) => /🚨 Still not done 15 minutes after the ETA\n\nPerson: Varun\nTask: GST report\nDescription: File the October GST returns\nDue: Oct 29 · 5:30 PM\nAssigned by: Anekant Jain/.test(message.text)));
+  assert.deepEqual(escalated.map((message) => message.chatId), [anekant.chatId]);
+  assert.match(escalated[0].text, /🚨 Still not done 15 minutes after the ETA\n\nPerson: Varun\nTask: GST report\nDescription: File the October GST returns\nDue: Oct 29 · 5:30 PM\nAssigned by: Anekant Jain/);
 });
 
 test('wa alerts 3b: long descriptions are clipped and big batches point to the app', () => {
