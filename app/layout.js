@@ -14,6 +14,11 @@ export const metadata = {
   applicationName: 'Delegation',
   appleWebApp: { capable: true, title: 'Delegation', statusBarStyle: 'default' },
   openGraph: { title: 'Delegation', description: 'Task delegation and follow-up', images: ['/brand/delegation-logo.jpg'] },
+  icons: {
+    icon: '/brand/delegation-mark.svg',
+    shortcut: '/brand/delegation-mark.svg',
+    apple: '/brand/delegation-mark.svg',
+  },
 };
 
 export const viewport = {
