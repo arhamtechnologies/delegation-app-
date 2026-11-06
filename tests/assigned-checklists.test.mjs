@@ -19,6 +19,10 @@ test('waits for a future start date', () => {
   assert.equal(getNextChecklistDueDate({ frequency: 'daily', start_date: '2026-11-20' }, '2026-11-06'), '2026-11-20');
 });
 
+test('finds a start date beyond the search window', () => {
+  assert.equal(getNextChecklistDueDate({ frequency: 'daily', start_date: '2028-06-01' }, '2026-11-06'), '2028-06-01');
+});
+
 test('skips Sundays because generation deactivates them', () => {
   assert.equal(getNextChecklistDueDate({ frequency: 'daily', start_date: '2026-11-01' }, '2026-11-08'), '2026-11-09');
   assert.equal(getNextChecklistDueDate(monthly([1], { start_date: '2026-11-01' }), '2026-11-01'), '2026-12-01');

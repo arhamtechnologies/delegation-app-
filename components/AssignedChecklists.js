@@ -6,14 +6,14 @@ import { formatChecklistDays, formatChecklistTime } from '../lib/checklist-data'
 import { formatChecklistDate } from '../lib/checklist-time';
 import { InlineError, Surface, SurfaceHeader } from './Workflow';
 
-export default function AssignedChecklists() {
+export default function AssignedChecklists({ refreshKey = 0 }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const token = await getAccessToken();
+      const token = await getAccessToken({ read: true });
       const response = await fetch('/api/checklist/assigned', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       const payload = await response.json().catch(() => ({}));
       if (response.ok) setResult(payload);
@@ -23,7 +23,7 @@ export default function AssignedChecklists() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   if (error) return <Surface><InlineError message={error} onRetry={load} /></Surface>;
   if (!result?.checklists?.length) return null;

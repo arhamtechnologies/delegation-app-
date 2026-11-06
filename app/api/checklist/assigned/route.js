@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 
 const timeZone = process.env.CHECKLIST_TIMEZONE || 'Asia/Kolkata';
 
-// Employees cannot read checklist_templates through RLS; this returns only the caller's own rows.
+// Uses the service role because employees cannot read their own leave through RLS; returns only the caller's rows.
 export async function GET(request) {
   const authorization = await authorizeChecklistEmployee(request);
   if (authorization.response) return authorization.response;
